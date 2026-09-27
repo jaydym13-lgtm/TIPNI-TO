@@ -21,14 +21,41 @@ window.otevriReportModal = (leagueName, tab) => {
     const zebricek = isLive ? (centralDoc.zebricekLive || []) : (centralDoc.zebricek || []);
     const kolaSouhrn = centralDoc.kolaSouhrn || {};
 
+    const parsujDatumMs = (d) => {
+        if (!d) return 0;
+        if (typeof d.toDate === 'function') return d.toDate().getTime();
+        if (d.seconds) return d.seconds * 1000;
+        return Date.parse(d) || 0;
+    };
+
+    // 🎯 CHYTRÝ DETEKTOR SKUTEČNĚ POSLEDNÍHO ODEHRANÉHO KOLA (ŘÍZENO DATUMEM, NE ČÍSLEM KOLA)
+    const zapasyMapa = store?.rozpisData?.zapasyMapa || {};
+    const koloLatestDateMap = {};
+    const koloEvaluatedCountMap = {};
+
+    Object.values(zapasyMapa).forEach(z => {
+        const isEval = (z.vysledek_domaci !== undefined && z.vysledek_hoste !== undefined && z.apiStatus !== 'IN_PLAY' && z.apiStatus !== 'PAUSED');
+        if (!isEval) return;
+        const k = window.prelozFaziTurnaje ? window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff) : z.kolo;
+        if (!k) return;
+        const dMs = parsujDatumMs(z.datum);
+        if (!koloLatestDateMap[k] || dMs > koloLatestDateMap[k]) {
+            koloLatestDateMap[k] = dMs;
+        }
+        koloEvaluatedCountMap[k] = (koloEvaluatedCountMap[k] || 0) + 1;
+    });
+
     const availableRounds = Object.keys(kolaSouhrn).filter(k => {
         const s = kolaSouhrn[k];
-        return s && (s.hracKola || s.nejvicPresnych || (s.topMatch && s.topMatch.isStarted));
+        return s && (s.hracKola || s.nejvicPresnych || (s.topMatch && s.topMatch.isStarted) || s.perfektniKolo);
     });
+
+    // Seřadíme kola podle reálného času dohrání (a počtu zápasů, aby 1 předehrávka nepřekryla celé kolo)
     availableRounds.sort((a, b) => {
-        const numA = parseInt(String(a).replace(/[^0-9]/g, '')) || 0;
-        const numB = parseInt(String(b).replace(/[^0-9]/g, '')) || 0;
-        return numB - numA;
+        const dateA = koloLatestDateMap[a] || 0;
+        const dateB = koloLatestDateMap[b] || 0;
+        if (dateA !== dateB) return dateB - dateA;
+        return (koloEvaluatedCountMap[b] || 0) - (koloEvaluatedCountMap[a] || 0);
     });
 
     const targetRoundKey = availableRounds[0] || centralDoc.aktivniKoloText || '';
@@ -68,6 +95,14 @@ window.otevriReportModal = (leagueName, tab) => {
             const tmUsers = souhrnKola.topMatch.exactUsers || [];
             const tmCnt = souhrnKola.topMatch.exactCount || 0;
             roundItems.push(`🔥 TOP zápas: ${tmCnt > 0 ? tmUsers.join(', ') : 'Nikdo netrefil'}`);
+        }
+
+        // 💎 PERFEKTNÍ KOLO (POUZE POKUD BYLO V TOMTO SPECIFICKÉM KOLE DOSAŽENO)
+        const pkFromCentral = (centralDoc.perfektniKola || []).filter(pk => pk.round === targetRoundKey);
+        const pkNames = souhrnKola.perfektniKolo?.names || pkFromCentral.map(pk => pk.nickname).join(', ');
+        if (pkNames) {
+            const bonusPts = souhrnKola.perfektniKolo?.bonus || 5;
+            roundItems.push(`💎 Perfektní kolo: ${pkNames} (+${bonusPts} b. bonus)`);
         }
 
         const klicKolaClean = String(targetRoundKey || '').replace(/[^0-9]/g, '');
@@ -1777,7 +1812,28 @@ window.renderPlayerTipsModalContent = () => {
         prefixLabel = 'BODY:';
     }
 
-    const ptsFormatted = (roundTotalPts >= 0 ? '+' : '') + roundTotalPts + ' b.';
+    const storeObj = Alpine.store('appState');
+    const myNickName = storeObj?.nickname || '';
+    const centralDoc = storeObj?.leaderboardData;
+    const kolaSouhrn = centralDoc?.kolaSouhrn || {};
+    const souhrnKola = kolaSouhrn[currentRoundName] || null;
+
+    // 💎 KONTROLA, ZDA TENTO HRÁČ ZÍSKAL V TOMTO KOLE PERFEKTNÍ KOLO (+5 B.)
+    const pravidlaLigy = PRAVIDLA_LIG[state.leagueName] || PRAVIDLA_LIG["DEFAULT"];
+    const bonusZiskKola = pravidlaLigy?.roundBonus || 5;
+
+    const maTentoHracPerfektniKolo = (centralDoc?.perfektniKola || []).some(pk =>
+        (pk.uid === state.playerUid || (pk.nickname && state.nickname && pk.nickname.trim().toLowerCase() === state.nickname.trim().toLowerCase())) &&
+        pk.round === currentRoundName
+    ) || (souhrnKola?.perfektniKolo?.names && souhrnKola.perfektniKolo.names.split(', ').some(n => n.trim().toLowerCase() === (state.nickname || '').trim().toLowerCase()));
+
+    let ptsFormatted = '';
+    if (maTentoHracPerfektniKolo && isFullyFinished) {
+        const celkemVcetneBonusu = roundTotalPts + bonusZiskKola;
+        ptsFormatted = `${roundTotalPts >= 0 ? '+' : ''}${roundTotalPts} <span style="color: #c084fc; font-weight: bold;">+ ${bonusZiskKola}</span> = <span style="color: #34d399; font-weight: 800;">+${celkemVcetneBonusu} b.</span>`;
+    } else {
+        ptsFormatted = (roundTotalPts >= 0 ? '+' : '') + roundTotalPts + ' b.';
+    }
     const ptsValueClass = roundTotalPts < 0 ? 'is-negative' : '';
 
     const optionsHtml = state.unikatniKola.map((kolo, idx) => `
@@ -1785,11 +1841,6 @@ window.renderPlayerTipsModalContent = () => {
             ${kolo}
         </div>
     `).join('');
-
-    const storeObj = Alpine.store('appState');
-    const myNickName = storeObj?.nickname || '';
-    const kolaSouhrn = storeObj?.leaderboardData?.kolaSouhrn || {};
-    const souhrnKola = kolaSouhrn[currentRoundName] || null;
 
     let roundBannerHtml = '';
     if (souhrnKola) {
@@ -1876,7 +1927,34 @@ window.renderPlayerTipsModalContent = () => {
             `;
         }
 
-        const itemsCombined = [rowWinnerHtml, rowExactHtml, rowTopHtml].filter(Boolean).join('');
+        // 💎 PERFEKTNÍ KOLO (ZOBRAZÍ SE POUZE V TOM KOLE, KDE HO NĚKDO SKUTEČNĚ DAL)
+        let rowPerfektniHtml = '';
+        const pkFromCentral = (centralDoc?.perfektniKola || []).filter(pk => pk.round === currentRoundName);
+        const pkNamesArr = souhrnKola.perfektniKolo?.names
+            ? souhrnKola.perfektniKolo.names.split(', ').map(n => n.trim()).filter(Boolean)
+            : pkFromCentral.map(pk => pk.nickname);
+
+        if (pkNamesArr.length > 0) {
+            const isMulti = pkNamesArr.length > 1;
+            const fullNamesHtml = formatNamesList(pkNamesArr);
+            const bonusPts = souhrnKola.perfektniKolo?.bonus || bonusZiskKola;
+
+            rowPerfektniHtml = `
+                <div class="strip-item ${isMulti ? 'is-expandable' : ''}" ${isMulti ? 'onclick="window.toggleStripRow(this)"' : ''}>
+                    <div class="strip-left">
+                        <span class="strip-icon">💎</span>
+                        <span class="strip-label" style="color: #c084fc;">Perfektní kolo</span>
+                    </div>
+                    <div class="strip-right">
+                        <span class="strip-val" style="color: #c084fc;">${isMulti ? `${pkNamesArr.length} hráči (+${bonusPts} b.)` : `${fullNamesHtml} (+${bonusPts} b.)`}</span>
+                        ${isMulti ? '<span class="strip-arrow">▼</span>' : ''}
+                    </div>
+                </div>
+                ${isMulti ? `<div class="strip-sub-drawer" style="display: none;">${fullNamesHtml}</div>` : ''}
+            `;
+        }
+
+        const itemsCombined = [rowWinnerHtml, rowExactHtml, rowTopHtml, rowPerfektniHtml].filter(Boolean).join('');
         if (itemsCombined) {
             roundBannerHtml = `
                 <div class="player-modal-summary-section">

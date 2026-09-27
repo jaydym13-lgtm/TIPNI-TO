@@ -84,6 +84,12 @@ const vstrikniStoresDoPameti = () => {
         onlineUidsSet: new Set(),
         communityLastSeen: {},
 
+        // 👀 REŽIM HOSTA & ANONYMNÍ TELEMETRIE (ZERO AUTH)
+        isGuest: false,
+        guestOnlineCount: 0,
+        guestTotalVisits: 0,
+        guestLastSeen: null,
+
         // 📊 POČÍTADLO ZÁPASŮ BEZ KURZŮ PRO NOTIFIKAČNÍ ODZNAK V MENU
         get missingOddsCount() {
             return this.missingOddsList.length;
@@ -292,7 +298,8 @@ const vstrikniStoresDoPameti = () => {
         get leagues() {
             const _tick = this.leagueFilterTick;
             const MASTER_LIGY = CONFIG.MASTER_LEAGUES;
-            let zakladniSeznam = this.isSuperAdmin ? MASTER_LIGY : [...(this._leagues || [])];
+            // 👁️ SuperAdmin i Host vidí kompletní nabídku všech soutěží
+            let zakladniSeznam = (this.isSuperAdmin || this.isGuest) ? MASTER_LIGY : [...(this._leagues || [])];
 
             if (!zakladniSeznam || !Array.isArray(zakladniSeznam) || zakladniSeznam.length === 0) return [];
 
@@ -316,7 +323,7 @@ const vstrikniStoresDoPameti = () => {
 
             // ↕️ APLIKACE UŽIVATELSKÉHO POŘADÍ (leagueOrder)
             const poradi = this.leagueOrder || [];
-            if (poradi.length > 0) {
+            if (poradi.length > 0 && !this.isGuest) {
                 vyfiltrovane.sort((a, b) => {
                     let idxA = poradi.indexOf(a);
                     let idxB = poradi.indexOf(b);
@@ -329,7 +336,9 @@ const vstrikniStoresDoPameti = () => {
             return vyfiltrovane;
         },
 
+        // 🔒 ZAMYKACÍ ZÁMEK: Pro hosta vrátí false (zamkne roletky i tlačítka uložení tipů)
         get isEnrolledInSelectedLeague() {
+            if (this.isGuest) return false;
             return true;
         },
 
@@ -349,6 +358,9 @@ const vstrikniStoresDoPameti = () => {
         canInstallPwa: false, // 📲 Reaktivní stav pro tlačítko instalace PWA
         isIos: /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1),
         isStandalone: window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true,
+        canLinkGoogle: false,
+        canLinkFacebook: false,
+        authMode: 'login',
         toggleGodMode() {
             if (this.isSuperAdmin) {
                 this.godModeActive = !this.godModeActive;
@@ -510,55 +522,34 @@ const vstrikniStoresDoPameti = () => {
             return false;
         },
 
-        // 🔍 DETEKTOR 2 NEJBLIŽŠÍCH NADCHÁZEJÍCÍCH KOL PRO PROGRAM (Seřazeno podle logického pořadí kol)
+        // 🔍 SEZNAM KOL ZOBRAZENÝCH V NÁHLEDU NADCHÁZEJÍCÍCH ZÁPASŮ (PRO PŘESKOK V KARUSELU)
         get nejblizsi2KolaProgramu() {
-            const budouciZapasy = this.serazenaTimelineZapasu.filter(z => {
-                const jeVyhodnoceny = (z.vysledek_domaci !== undefined && z.apiStatus !== 'IN_PLAY' && z.apiStatus !== 'PAUSED');
-                const obaNeznamy = (z.domaci === 'Neznámý' && z.hoste === 'Neznámý');
-                return !jeVyhodnoceny && !obaNeznamy && !this.jeZapasOdlozenyBezTerminu(z);
-            });
-            const unikatni = [];
-            for (const z of budouciZapasy) {
-                const k = window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff);
-                if (k && !unikatni.includes(k)) {
-                    unikatni.push(k);
-                }
+            if (this.programKolaIndex === 0) {
+                const feed = this.dynamickyFeedZapasu || [];
+                const list = feed.map(z => window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff));
+                return [...new Set(list)].filter(k => String(k).trim() !== '');
             }
-            const maCisla = unikatni.some(k => /\d+/.test(k));
-            if (maCisla) {
-                unikatni.sort((a, b) => {
-                    const numA = parseInt(String(a).replace(/[^0-9]/g, ''), 10) || 0;
-                    const numB = parseInt(String(b).replace(/[^0-9]/g, ''), 10) || 0;
-                    return numA - numB;
-                });
-            }
-            return unikatni.slice(0, 2);
+            return [];
         },
 
-        // 🔍 DETEKTOR 2 POSLEDNÍCH ODEHRANÝCH KOL PRO VÝSLEDKY
+        // 🔍 SEZNAM KOL ZOBRAZENÝCH V NÁHLEDU POSLEDNÍCH VÝSLEDKŮ (PRO PŘESKOK V KARUSELU)
         get posledni2KolaVysledku() {
-            const odehrane = this.serazenaTimelineZapasu.filter(z => 
-                z.vysledek_domaci !== undefined && z.apiStatus !== 'IN_PLAY' && z.apiStatus !== 'PAUSED'
-            );
-            const kola = [];
-            for (let i = odehrane.length - 1; i >= 0; i--) {
-                const k = window.prelozFaziTurnaje(odehrane[i].stage, odehrane[i].kolo, odehrane[i].isPlayoff);
-                if (k && !kola.includes(k)) {
-                    kola.push(k);
-                    if (kola.length === 2) break;
-                }
+            if (this.vysledkyKolaIndex === 0) {
+                const feed = this.dynamickyFeedZapasu || [];
+                const list = feed.map(z => window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff));
+                return [...new Set(list)].filter(k => String(k).trim() !== '');
             }
-            return kola;
+            return [];
         },
 
         // Dynamická roletka pro Výsledky
         get unikatniKolaVysledku() {
             const vyhodnocene = this.serazenaTimelineZapasu.filter(z => 
-				z.vysledek_domaci !== undefined && z.apiStatus !== 'IN_PLAY' && z.apiStatus !== 'PAUSED'
-			);
-			const listKol = vyhodnocene.map(z => window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff));
-			const unikatni = [...new Set(listKol)].filter(k => String(k).trim() !== '');
-			return ['Poslední zápasy', ...unikatni.reverse()];
+                z.vysledek_domaci !== undefined && z.apiStatus !== 'IN_PLAY' && z.apiStatus !== 'PAUSED'
+            );
+            const listKol = vyhodnocene.map(z => window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff));
+            const unikatni = [...new Set(listKol)].filter(k => String(k).trim() !== '');
+            return ['Poslední zápasy', ...unikatni.reverse()];
         },
 
         // Dynamická roletka pro Program utkání (Ignoruje odložené zápasy bez nového data)
@@ -581,21 +572,45 @@ const vstrikniStoresDoPameti = () => {
             return ['Nadcházející zápasy', ...unikatni];
         },
 
-        // Rozhodovací pipeline, která plní HTML šablonu čistými daty (Filtruje odložené zápasy bez data)
+        // 🎯 CENTRÁLNÍ PIPELINE PRO NADCHÁZEJÍCÍ ZÁPASY A VÝSLEDKY (ČISTÁ ČASOVÁ OSA S PRIORITOU MIN. 8 ZÁPASŮ)
         get dynamickyFeedZapasu() {
             if (this.matchViewMode === 'results') {
-				const vyhodnocene = this.serazenaTimelineZapasu.filter(z => 
-					z.vysledek_domaci !== undefined && z.apiStatus !== 'IN_PLAY' && z.apiStatus !== 'PAUSED'
-				);
-				const vybranaVolba = this.unikatniKolaVysledku[this.vysledkyKolaIndex] || 'Poslední zápasy';
+                const vyhodnocene = this.serazenaTimelineZapasu.filter(z => 
+                    z.vysledek_domaci !== undefined && z.apiStatus !== 'IN_PLAY' && z.apiStatus !== 'PAUSED'
+                );
+                const vybranaVolba = this.unikatniKolaVysledku[this.vysledkyKolaIndex] || 'Poslední zápasy';
 
-				if (this.vysledkyKolaIndex === 0 || vybranaVolba === 'Poslední zápasy') {
-					const posl2 = this.posledni2KolaVysledku;
-					return vyhodnocene.slice().reverse().filter(z => posl2.includes(window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff)));
-				} else {
-					return vyhodnocene.filter(z => window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff) === vybranaVolba);
-				}
-			} else {
+                // 1. REŽIM VÝSLEDKŮ: POSLEDNÍ ZÁPASY (ČISTÁ REVERZNÍ CHRONOLOGIE DO MINULOSTI)
+                if (this.vysledkyKolaIndex === 0 || vybranaVolba === 'Poslední zápasy') {
+                    if (vyhodnocene.length === 0) return [];
+                    const obracene = vyhodnocene.slice().reverse();
+                    if (obracene.length <= 8) return obracene;
+
+                    const vybraneVysledky = [];
+                    let datumPoslednihoMs = 0;
+
+                    for (let i = 0; i < obracene.length; i++) {
+                        const z = obracene[i];
+                        const zMs = z.datumMs || (z.datumObj ? z.datumObj.getTime() : 0);
+
+                        if (vybraneVysledky.length < 8) {
+                            vybraneVysledky.push(z);
+                            datumPoslednihoMs = zMs;
+                        } else {
+                            // Dobereme zápasy ze stejného hracího dne (do 24 h od 8. zápasu), aby nebyl rozseknutý večer
+                            if (datumPoslednihoMs && Math.abs(datumPoslednihoMs - zMs) <= 24 * 60 * 60 * 1000) {
+                                vybraneVysledky.push(z);
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    return vybraneVysledky;
+                } else {
+                    // Pevná kartotéka konkrétního kola z roletky
+                    return vyhodnocene.filter(z => window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff) === vybranaVolba);
+                }
+            } else {
                 const budouciZapasy = this.serazenaTimelineZapasu.filter(z => {
                     const jeVyhodnoceny = (z.vysledek_domaci !== undefined && z.apiStatus !== 'IN_PLAY' && z.apiStatus !== 'PAUSED');
                     const obaNeznamy = (z.domaci === 'Neznámý' && z.hoste === 'Neznámý');
@@ -604,20 +619,34 @@ const vstrikniStoresDoPameti = () => {
 
                 const vybranaVolba = this.unikatniKolaProgramu[this.programKolaIndex] || 'Nadcházející zápasy';
 
+                // 2. REŽIM PROGRAMU: NADCHÁZEJÍCÍ ZÁPASY (ČISTÁ CHRONOLOGIE DOPŘEDU S MIN. 8 ZÁPASY)
                 if (this.programKolaIndex === 0 || vybranaVolba === 'Nadcházející zápasy') {
-                    const nej2 = this.nejblizsi2KolaProgramu;
-                    const nej2ZapasoveCasy = budouciZapasy
-                        .filter(z => nej2.includes(window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff)))
-                        .map(z => z.datumObj ? z.datumObj.getTime() : 0);
-                    const maxDatumNej2 = nej2ZapasoveCasy.length > 0 ? Math.max(...nej2ZapasoveCasy) : Infinity;
+                    if (budouciZapasy.length <= 8) return budouciZapasy;
 
-                    return budouciZapasy.filter(z => {
-                        const kolo = window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff);
-                        if (nej2.includes(kolo)) return true;
-                        const cas = z.datumObj ? z.datumObj.getTime() : 0;
-                        return cas > 0 && cas <= maxDatumNej2;
-                    });
+                    const vybraneZapasy = [];
+                    let datumHraniceMs = 0;
+
+                    for (let i = 0; i < budouciZapasy.length; i++) {
+                        const z = budouciZapasy[i];
+                        const zMs = z.datumMs || (z.datumObj ? z.datumObj.getTime() : 0);
+
+                        if (vybraneZapasy.length < 8) {
+                            vybraneZapasy.push(z);
+                            datumHraniceMs = zMs;
+                        } else {
+                            // Dobereme zápasy ze stejného dne / do 36 h od 8. zápasu (aby se nerozseklo rozehrané kolo),
+                            // ale zápas o měsíc dál sem nikdy neprojde.
+                            if (datumHraniceMs && (zMs - datumHraniceMs) <= 36 * 60 * 60 * 1000) {
+                                vybraneZapasy.push(z);
+                                datumHraniceMs = zMs;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    return vybraneZapasy;
                 } else {
+                    // Pevná kartotéka konkrétního kola z roletky (zde se zobrazí všechny zápasy daného kola včetně vzdálených dohrávek)
                     return budouciZapasy.filter(z => window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff) === vybranaVolba);
                 }
             }
@@ -716,6 +745,27 @@ const vstrikniStoresDoPameti = () => {
         const store = Alpine.store('appState');
         if (store && typeof val === 'number' && val > 0) {
             store.communityTotal = val;
+        }
+    });
+
+    // 👀 ŽIVÁ TELEMETRIE ANONYMNÍCH HOSTŮ (RTDB WEBSOCKET - 0 READS Z FIRESTORE)
+    const guestPresenceRef = rtdbRef(rtdb, 'guest_presence');
+    onRtdbValue(guestPresenceRef, (snap) => {
+        const data = snap.val() || {};
+        const count = Object.keys(data).length;
+        const store = Alpine.store('appState');
+        if (store) {
+            store.guestOnlineCount = count;
+        }
+    });
+
+    const guestStatsRef = rtdbRef(rtdb, 'guest_stats');
+    onRtdbValue(guestStatsRef, (snap) => {
+        const data = snap.val() || {};
+        const store = Alpine.store('appState');
+        if (store) {
+            store.guestTotalVisits = data.total || 0;
+            store.guestLastSeen = data.lastSeen || null;
         }
     });
 
@@ -969,24 +1019,52 @@ const initTipniToAlpine = () => {
         }
     };
 
-    // 📊 KONTROLOR A HLASOVACÍ ENGINE DYNAMICKÝCH ANKET
-    window.zkontrolujAktivniAnketu = async () => {
+    // 📊 REAKTIVNÍ ENGINE DYNAMICKÝCH ANKET (REALTIME STREAM S DETERMINISTICKÝM LIFECYCLE)
+    window.activeSurveyUnsubscribe = window.activeSurveyUnsubscribe || null;
+
+    window.zkontrolujAktivniAnketu = () => {
         const store = Alpine.store('appState');
         const user = window.auth?.currentUser;
-        if (!store || !user || store.showSurveys === false) return;
 
-        try {
-            const surveyRef = doc(db, "ankety", "aktivni");
-            const surveySnap = await getDoc(surveyRef);
-            if (!surveySnap.exists()) return;
+        // Pokud jsou ankety v nastavení vypnuty, uživatel je host nebo odhlášen, odpojíme stream
+        if (!store || !user || store.showSurveys === false || store.isGuest) {
+            if (window.activeSurveyUnsubscribe) {
+                window.activeSurveyUnsubscribe();
+                window.activeSurveyUnsubscribe = null;
+            }
+            store.activeSurveyData = null;
+            store.surveyModalOpen = false;
+            return;
+        }
+
+        // Idempotentní pojistka: zabrání duplicitnímu odběru téhož dokumentu
+        if (window.activeSurveyUnsubscribe) return;
+
+        const surveyRef = doc(db, "ankety", "aktivni");
+
+        window.activeSurveyUnsubscribe = onSnapshot(surveyRef, async (surveySnap) => {
+            // Pokud dokument v databázi neexistuje, modal zůstává zavřený bez chyb
+            if (!surveySnap.exists()) {
+                store.activeSurveyData = null;
+                store.surveyModalOpen = false;
+                return;
+            }
 
             const sData = surveySnap.data();
-            if (sData.isOpen === false || sData.stav === 'UZAVRENO') return;
+            if (sData.isOpen === false || sData.stav === 'UZAVRENO') {
+                store.activeSurveyData = null;
+                store.surveyModalOpen = false;
+                return;
+            }
 
             // 1. Kontrola časového limitu (Deadlinu)
             if (sData.konecDatum) {
                 const kMs = sData.konecDatum.toDate ? sData.konecDatum.toDate().getTime() : (sData.konecDatum.seconds ? sData.konecDatum.seconds * 1000 : new Date(sData.konecDatum).getTime());
-                if (kMs && Date.now() > kMs) return;
+                if (kMs && Date.now() > kMs) {
+                    store.activeSurveyData = null;
+                    store.surveyModalOpen = false;
+                    return;
+                }
                 
                 const dObj = new Date(kMs);
                 sData.konecText = `${dObj.getDate()}. ${dObj.getMonth() + 1}. ${String(dObj.getHours()).padStart(2, '0')}:${String(dObj.getMinutes()).padStart(2, '0')}`;
@@ -997,19 +1075,33 @@ const initTipniToAlpine = () => {
             if (!cilove.includes('all')) {
                 const userLeagues = store._leagues || store.leagues || [];
                 const maOpravnenouLigu = cilove.some(l => userLeagues.includes(l));
-                if (!maOpravnenouLigu) return;
+                if (!maOpravnenouLigu) {
+                    store.activeSurveyData = null;
+                    store.surveyModalOpen = false;
+                    return;
+                }
             }
 
-            // 3. Kontrola, zda hráč již nehlasoval
-            const voteRef = doc(db, "ankety", "aktivni", "hlasy", user.uid);
-            const voteSnap = await getDoc(voteRef);
-            if (voteSnap.exists()) return;
+            // 3. Kontrola hlasu uživatele
+            try {
+                const voteRef = doc(db, "ankety", "aktivni", "hlasy", user.uid);
+                const voteSnap = await getDoc(voteRef);
+                if (voteSnap.exists()) {
+                    store.activeSurveyData = null;
+                    store.surveyModalOpen = false;
+                    return;
+                }
+            } catch (err) {
+                return;
+            }
 
             store.activeSurveyData = sData;
             store.surveyModalOpen = true;
-        } catch (e) {
-            console.error("Chyba kontroly aktivní ankety:", e);
-        }
+        }, (err) => {
+            if (err.code !== 'permission-denied') {
+                console.warn("Anketa realtime stream notice:", err.message);
+            }
+        });
     };
 
     window.submitDynamicSurveyVote = async (optionIndex, optionText) => {

@@ -1011,14 +1011,12 @@ window.renderSuperAdmin = async (targetTab = null) => {
             window.vykresliSuperAdminUzivatele(uzivatele);
         }
     } else if (tab === 'tools') {
-        const allUsers = store?.adminUsers || [];
-        const adminOnlyList = allUsers.filter(u => u.isAdmin === true || u.isSuperAdmin === true);
+        const adminOnlyList = [...(store?.adminManagers || window.adminManagersCache || [])];
         adminOnlyList.sort((a, b) => (a.nickname || 'Admin').localeCompare(b.nickname || 'Admin', 'cs'));
 
         const adminOptionsHtml = adminOnlyList.length > 0 
             ? adminOnlyList.map(u => `<option value="${u.id}">👑 ${window.escapeHTML(u.nickname || 'Admin')} (${u.email || 'bez e-mailu'})</option>`).join('')
             : '<option value="" disabled>Žádní administrátoři nenalezeni</option>';
-
         contentArea.innerHTML = `
             <div class="bonus-collapse-box" style="margin-top: 5px; width: 100%;">
                 <button class="bonus-collapse-trigger" onclick="const c = this.nextElementSibling; const isHidden = c.style.display === 'none'; c.style.display = isHidden ? 'block' : 'none'; this.querySelector('.arrow').innerText = isHidden ? '▲' : '▼';" style="color: #ea580c; border-color: #c2410c; font-weight: bold; background: transparent;">
@@ -1079,6 +1077,67 @@ window.vykresliSuperAdminUzivatele = (docsArray) => {
 
     const wrapper = document.getElementById('superAdminUsersRoletyWrapper');
     if (!wrapper) return;
+
+    const store = Alpine.store('appState');
+    const guestOnline = store?.guestOnlineCount || 0;
+    const guestTotal = store?.guestTotalVisits || 0;
+    const guestLastSeen = store?.guestLastSeen;
+
+    const formatujAktivituTimestamp = (ts) => {
+        if (!ts) return '<span style="color: #6b7280; font-size: 0.75rem; font-family: monospace;">⏳ Nikdy</span>';
+        let d = new Date(ts);
+        if (isNaN(d.getTime())) return '<span style="color: #6b7280; font-size: 0.75rem; font-family: monospace;">⏳ Nikdy</span>';
+
+        const cas = d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+        const nyni = new Date();
+        const dnesPolnoc = new Date(nyni.getFullYear(), nyni.getMonth(), nyni.getDate());
+        const vceraPolnoc = new Date(dnesPolnoc);
+        vceraPolnoc.setDate(vceraPolnoc.getDate() - 1);
+
+        if (d >= dnesPolnoc) {
+            return `<span style="color: #38bdf8; font-weight: bold; font-size: 0.75rem; font-family: monospace;">Dnes ${cas}</span>`;
+        } else if (d >= vceraPolnoc) {
+            return `<span style="color: #fbbf24; font-size: 0.75rem; font-family: monospace;">Včera ${cas}</span>`;
+        } else {
+            const datumStr = `${d.getDate()}. ${d.getMonth() + 1}.`;
+            return `<span style="color: #9ca3af; font-size: 0.75rem; font-family: monospace;">${datumStr} ${cas}</span>`;
+        }
+    };
+
+    const guestLastSeenHtml = formatujAktivituTimestamp(guestLastSeen);
+
+    // 👤 SYSTÉMOVÝ ŘÁDEK TELEMETRIE ANONYMNÍCH HOSTŮ NA VRCHOLU SOUPISKY
+    const guestRow = document.createElement('div');
+    guestRow.className = 'leaderboard-row-wrapper';
+    guestRow.style.width = '100%';
+    guestRow.innerHTML = `
+        <div onclick="const det = this.nextElementSibling; const arr = this.querySelector('.super-arrow-icon'); if(det.style.display==='none'){det.style.display='flex'; arr.innerText='▲';}else{det.style.display='none'; arr.innerText='▼';}" 
+             class="leaderboard-row-trigger" style="background: rgba(168, 85, 247, 0.12); border: 1px solid #a855f7; cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; border-radius: 8px;">
+            <div class="leaderboard-row-left" style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size: 1.1rem; line-height: 1;">👀</span>
+                <strong style="color: #c084fc; font-size: 1rem; font-family: 'Oswald', sans-serif; letter-spacing: 0.3px;">ANONYMNÍ NÁVŠTĚVNÍCI</strong>
+            </div>
+            <div class="leaderboard-row-right" style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                ${guestOnline > 0 ? `<span style="color: #34d399; font-weight: bold; font-size: 0.75rem; font-family: monospace;">🟢 ${guestOnline} online</span>` : guestLastSeenHtml}
+                <span class="super-arrow-icon" style="color: #c084fc; font-size: 0.78rem;">▼</span>
+            </div>
+        </div>
+        <div class="leaderboard-row-dropdown" style="display: none; background: #0f172a; border: 1px solid #a855f7; border-top: none; padding: 15px; border-radius: 0 0 8px 8px; margin-top: -4px; flex-direction: column; gap: 10px; text-align: left;">
+            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1f2937; padding-bottom: 8px;">
+                <span style="font-size: 0.8rem; color: #9ca3af;">🌐 Právě si prohlíží web:</span>
+                <span style="color: #34d399; font-size: 0.9rem; font-family: monospace; font-weight: bold;">${guestOnline} ${guestOnline === 1 ? 'host' : (guestOnline >= 2 && guestOnline <= 4 ? 'hosté' : 'hostů')}</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1f2937; padding-bottom: 8px;">
+                <span style="font-size: 0.8rem; color: #9ca3af;">📈 Celkový počet nahlédnutí:</span>
+                <span style="color: #fbbf24; font-size: 0.9rem; font-family: monospace; font-weight: bold;">${guestTotal}×</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-size: 0.8rem; color: #9ca3af;">⏱️ Poslední nahlédnutí:</span>
+                <span>${guestLastSeenHtml}</span>
+            </div>
+        </div>
+    `;
+    wrapper.appendChild(guestRow);
 
     const uzivatelePole = (docsArray || []).map(uDoc => {
         const data = typeof uDoc.data === 'function' ? uDoc.data() : uDoc;
@@ -1402,11 +1461,11 @@ window.openLoutkovodicModal = (uid, allowAdmin = false) => {
     const store = Alpine.store('appState');
     if (!store) return;
 
-    const cachedDoc = window.adminUsersCache?.find(docSnap => docSnap.id === uid);
-    const cachedData = cachedDoc ? (typeof cachedDoc.data === 'function' ? cachedDoc.data() : cachedDoc) : {};
-    const uItem = store.adminUsers?.find(u => u.id === uid) 
-               || store.adminUsersCache?.find(u => u.id === uid)
-               || cachedData || {};
+    const uItem = store.adminManagers?.find(u => u.id === uid)
+               || store.adminUsers?.find(u => u.id === uid) 
+               || window.adminManagersCache?.find(u => u.id === uid)
+               || window.adminUsersCache?.find(u => u.id === uid)
+               || {};
     
     if (!allowAdmin && (uItem.isAdmin || uItem.isSuperAdmin)) {
         window.showToast("⛔ Loutkovodič je pro účty administrátorů zakázán! (Použij záložku Záchrana bodů)", true);

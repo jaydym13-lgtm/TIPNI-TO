@@ -89,9 +89,11 @@ const purgeUserAbsoluteCF = onCall(async (request) => {
     await batch.commit();
     await auth.deleteUser(targetUid);
 
-    // ⚡ RTDB SYNCHRONIZACE: Okamžité vymazání z RTDB soupisky
+    // ⚡ RTDB SYNCHRONIZACE: Okamžité vymazání soupisky i online přítomnosti
     try {
-      await getDatabase().ref(`admin_roster/${targetUid}`).remove();
+      const rtdb = getDatabase();
+      await rtdb.ref(`admin_roster/${targetUid}`).remove();
+      await rtdb.ref(`status/${targetUid}`).remove();
     } catch (rtdbErr) {
       console.warn("RTDB purge varování:", rtdbErr.message);
     }
@@ -1014,10 +1016,21 @@ async function spustVnitrniPrepocetLigy(leagueName, sezonaId, matchIdsProSpyDelt
       }
     }
 
+    const pKolaUsers = perfektniKolaSeznam.filter(pk => pk.round === klicKola);
+    let perfektniKoloObj = null;
+    if (pKolaUsers.length > 0) {
+      perfektniKoloObj = {
+        names: pKolaUsers.map(pk => pk.nickname).join(', '),
+        count: pKolaUsers.length,
+        bonus: pravidlaLigi.roundBonus || 5
+      };
+    }
+
     kolaSouhrn[klicKola] = {
       hracKola: hraciKolaObj,
       topMatch: topMatchObj,
-      nejvicPresnych: nejvicPresnychObj
+      nejvicPresnych: nejvicPresnychObj,
+      perfektniKolo: perfektniKoloObj
     };
   });
 
@@ -1752,15 +1765,18 @@ const recalculateLeaderboardCF = onCall({
   }
 });
 
-// 🔮 FUNKCE 5: Transfér herních dat
-const transferUserDataCF = onCall({ cors: true }, async (request) => {
+// 🔮 FUNKCE 5: Transfér herních dat (Přelévání bodů, licencí a kompletní úklid RTDB & R2)
+const transferUserDataCF = onCall({
+  cors: true,
+  secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
+}, async (request) => {
   if (!request.auth || !request.auth.token.isSuperAdmin) {
     throw new HttpsError("permission-denied", "Tento vládní transfér smí spustit pouze Super Admin!");
   }
 
   const oldEmail = (request.data.oldEmail || "").trim().toLowerCase();
   const newEmail = (request.data.newEmail || "").trim().toLowerCase();
-  const sezonaId = request.data.sezonaId || "2026_2027";
+  const sezonaId = request.data.sezonaId || DEFAULT_SEASON_ID || "2026_2027";
 
   if (!oldEmail || !newEmail) {
     throw new HttpsError("invalid-argument", "Musíš zadat starý i nový e-mail!");
@@ -1779,21 +1795,64 @@ const transferUserDataCF = onCall({ cors: true }, async (request) => {
       throw new HttpsError("not-found", `Cílový nový uživatel s e-mailem ${newEmail} neexistuje! Musí se nejprve registrovat.`);
     }
 
-    const oldUid = oldUserQuery.docs[0].id;
-    const newUid = newUserQuery.docs[0].id;
+    const oldUserDoc = oldUserQuery.docs[0];
+    const newUserDoc = newUserQuery.docs[0];
+    const oldUid = oldUserDoc.id;
+    const newUid = newUserDoc.id;
+    const oldData = oldUserDoc.data() || {};
+    const newData = newUserDoc.data() || {};
 
+    const oldLeagues = oldData.leagues || [];
+    const oldIsAdmin = oldData.isAdmin === true;
+    const oldIsSuperAdmin = oldData.isSuperAdmin === true;
+
+    // Sloučení licencí a zachování původní přezdívky
+    const mergedLeagues = Array.from(new Set([...(newData.leagues || []), ...oldLeagues]));
+    const targetNickname = oldData.nickname || newData.nickname || 'Hráč';
+
+    // 1. Přenesení rolí a lig v Auth Claims nového uživatele
+    try {
+      await auth.setCustomUserClaims(newUid, {
+        isAdmin: oldIsAdmin || newData.isAdmin === true,
+        isSuperAdmin: oldIsSuperAdmin || newData.isSuperAdmin === true,
+        leagues: mergedLeagues
+      });
+    } catch (claimsErr) {
+      console.warn("Chyba při zápisu claims pro nového uživatele:", claimsErr.message);
+    }
+
+    // 2. Aktualizace Firestore profilu nového uživatele (včetně přezdívky)
+    await db.collection("users").doc(newUid).update({
+      nickname: targetNickname,
+      leagues: mergedLeagues,
+      isAdmin: oldIsAdmin || newData.isAdmin === true,
+      isSuperAdmin: oldIsSuperAdmin || newData.isSuperAdmin === true
+    });
+
+    // 3. Aktualizace RTDB admin_roster (s původním nickem) a okamžitý úklid starého účtu
+    const rtdb = getDatabase();
+    try {
+      await rtdb.ref(`admin_roster/${newUid}`).update({
+        nickname: targetNickname,
+        email: newEmail,
+        leagues: mergedLeagues,
+        isAdmin: oldIsAdmin || newData.isAdmin === true,
+        isSuperAdmin: oldIsSuperAdmin || newData.isSuperAdmin === true
+      });
+      await rtdb.ref(`admin_roster/${oldUid}`).remove();
+      await rtdb.ref(`status/${oldUid}`).remove();
+    } catch (rtdbErr) {
+      console.warn("RTDB sync/purge varování při transféru:", rtdbErr.message);
+    }
+
+    // 4. Přelití tipů v sezónním monolitu
     const oldSezonaRef = db.collection("users").doc(oldUid).collection("sezony").doc(sezonaId);
     const oldSezonaSnap = await oldSezonaRef.get();
 
-    if (!oldSezonaSnap.exists) {
-      return { success: true, message: "Původní hráč neměl v této sezóně žádné uložené tipy. Převod netřeba." };
-    }
-
-    const staráDataSezóny = oldSezonaSnap.data() || {};
+    const staráDataSezóny = oldSezonaSnap.exists ? (oldSezonaSnap.data() || {}) : {};
     const staréSouteze = staráDataSezóny.souteze || {};
-
     const upravenéSouteze = {};
-    
+
     Object.keys(staréSouteze).forEach(ligaKlic => {
       upravenéSouteze[ligaKlic] = { ...staréSouteze[ligaKlic] };
 
@@ -1821,8 +1880,12 @@ const transferUserDataCF = onCall({ cors: true }, async (request) => {
     const batch = db.batch();
     const newSezonaRef = db.collection("users").doc(newUid).collection("sezony").doc(sezonaId);
 
-    batch.set(newSezonaRef, { souteze: upravenéSouteze }, { merge: true });
-    batch.delete(oldSezonaRef);
+    if (Object.keys(upravenéSouteze).length > 0) {
+      batch.set(newSezonaRef, { souteze: upravenéSouteze }, { merge: true });
+    }
+    if (oldSezonaSnap.exists) {
+      batch.delete(oldSezonaRef);
+    }
     batch.delete(db.collection("users").doc(oldUid));
     batch.delete(db.collection("uzivatele_online").doc(oldUid));
 
@@ -1834,9 +1897,44 @@ const transferUserDataCF = onCall({ cors: true }, async (request) => {
       console.warn("Uživatel v Auth již neexistoval nebo nelze smazat:", authErr.message);
     }
 
+    // 5. Úklid starých JSON souborů historie na Cloudflare R2
+    const { DeleteObjectCommand } = require("@aws-sdk/client-s3");
+    const r2Client = new S3Client({
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      },
+      region: "auto",
+    });
+
+    const dotceneLigyZTipu = Object.keys(staréSouteze).map(lKlic => lKlic.replace(/_/g, " "));
+    const vsechnyDotceneLigy = Array.from(new Set([...mergedLeagues, ...dotceneLigyZTipu]));
+
+    for (const liga of vsechnyDotceneLigy) {
+      const lKlic = liga.replace(/ /g, "_");
+      try {
+        await r2Client.send(new DeleteObjectCommand({
+          Bucket: "tipni-to-data",
+          Key: `sezony/${sezonaId}/${lKlic}/historie_hrace_${oldUid}.json`
+        }));
+      } catch (delErr) {
+        console.warn(`Nepodařilo se smazat starou historii na R2 pro ligu ${liga}:`, delErr.message);
+      }
+    }
+
+    // 6. Automatický přepočet všech zasažených lig (přegeneruje R2 žebříčky a cinkne RTDB maják)
+    for (const liga of vsechnyDotceneLigy) {
+      try {
+        await spustVnitrniPrepocetLigy(liga, sezonaId, null);
+      } catch (recalcErr) {
+        console.error(`Chyba přepočtu ligy ${liga} při transféru:`, recalcErr);
+      }
+    }
+
     return { 
       success: true, 
-      message: `Tipy a body byly úspěšně přelity z ID ${oldUid} na nové ID ${newUid}! Starý šuplík vymazán.` 
+      message: `Transfér dokončen! Body a licence byly převedeny na ${newEmail}, starý účet smazán a žebříčky přepočítány.` 
     };
 
   } catch (error) {

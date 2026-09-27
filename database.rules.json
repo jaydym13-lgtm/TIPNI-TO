@@ -3,12 +3,22 @@
     "status": {
       ".read": true,
       "$uid": {
-        ".write": "auth != null && auth.uid === $uid"
+        ".write": "auth != null"
       }
     },
     "stats": {
       ".read": true,
       ".write": "auth != null"
+    },
+    "guest_presence": {
+      ".read": true,
+      "$guestId": {
+        ".write": true
+      }
+    },
+    "guest_stats": {
+      ".read": true,
+      ".write": true
     },
     "admin_roster": {
       ".read": "auth != null && (auth.token.isAdmin === true || auth.token.isSuperAdmin === true)",

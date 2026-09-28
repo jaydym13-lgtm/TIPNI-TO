@@ -64,7 +64,6 @@ const vstrikniStoresDoPameti = () => {
         superAdminActiveTab: 'users', // 👑 Aktivní podzáložka SuperAdmin kokpitu ('users' | 'tools' | 'odds')
         adminMatches: [],
         adminUsers: [],
-        adminOpenedUserId: null,
         adminOpenedUserId: null, // 🔒 Držák otevřeného uživatele v Admin panelu (null = vše zavřeno)
         myOvr: parseInt(localStorage.getItem('tipni_cache_my_ovr') || '0', 10),
         profileTargetUid: null,
@@ -359,7 +358,6 @@ const vstrikniStoresDoPameti = () => {
         isIos: /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1),
         isStandalone: window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true,
         canLinkGoogle: false,
-        canLinkFacebook: false,
         authMode: 'login',
         toggleGodMode() {
             if (this.isSuperAdmin) {
@@ -951,7 +949,7 @@ const initTipniToAlpine = () => {
             localStorage.setItem('tipni_notify_untipped', 'false');
             try {
                 await togglePushCF({ enabled: false });
-                window.showToast("🔕 Upozornění před výkopem vypnuto.");
+                window.showToast("🔕 Upozornění před začátkem zápasu vypnuto.");
             } catch (e) {
                 console.error("Chyba vypnutí notifikací:", e);
             }
@@ -989,7 +987,7 @@ const initTipniToAlpine = () => {
 
             store.notifyUntipped = true;
             localStorage.setItem('tipni_notify_untipped', 'true');
-            window.showToast("🔔 Upozornění před výkopem úspěšně aktivováno!");
+            window.showToast("🔔 Upozornění před začátkem zápasu úspěšně aktivováno!");
         } catch (err) {
             console.error("Chyba aktivace push notifikací:", err);
             store.notifyUntipped = false;

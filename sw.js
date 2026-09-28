@@ -4,7 +4,7 @@
 // =========================================================================
 
 // 🏷️ JEDINÉ CENTRÁLNÍ MÍSTO PRAVDY PRO VERZI APLIKACE
-const APP_VERSION = 'v1.2.4';
+const APP_VERSION = 'v1.2.5';
 const CACHE_NAME = `tipnito-core-${APP_VERSION}`;
 
 // Statické a neměnné assety (Písma, ikony, externí knihovny z CDN)
@@ -207,7 +207,7 @@ self.addEventListener('push', (event) => {
     }
 
     const title = payload.notification?.title || payload.data?.title || payload.title || 'TIPNI TO!';
-    const body = payload.notification?.body || payload.data?.body || payload.body || 'Pozor, blíží se výkop zápasu!';
+    const body = payload.notification?.body || payload.data?.body || payload.body || 'Pozor, blíží se začátek zápasu!';
     const rawUrl = payload.data?.url || payload.notification?.data?.url || payload.url || '/';
     const targetUrl = new URL(rawUrl, self.location.origin).href;
 

@@ -2,7 +2,7 @@
 // 🔐 TIPNI TO! - ŽIVÁ AUTENTIKACE A SLEDOVÁNÍ ROLÍ V REÁLNÉM ČASE (auth.js)
 // =========================================================================
 
-import { signInWithEmailAndPassword, signOut, onIdTokenChanged, GoogleAuthProvider, FacebookAuthProvider, signInWithPopup, linkWithPopup, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import { signInWithEmailAndPassword, signOut, onIdTokenChanged, GoogleAuthProvider, signInWithPopup, linkWithPopup, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 import { doc, getDoc, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, collection, arrayUnion } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 import { getDatabase, ref as rtdbRef, onValue as onRtdbValue, onDisconnect, set as setRtdb, serverTimestamp as rtdbServerTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
@@ -138,33 +138,6 @@ window.linkCurrentAccountWithGoogle = async () => {
     }
 };
 
-// 🔵 PROPOJENÍ STÁVAJÍCÍHO ÚČTU S FACEBOOKEM (V BOČNÍM MENU)
-window.linkCurrentAccountWithFacebook = async () => {
-    try {
-        const user = window.auth.currentUser;
-        if (!user) return;
-        const provider = new FacebookAuthProvider();
-        provider.addScope('email');
-        provider.addScope('public_profile');
-        await linkWithPopup(user, provider);
-        if (typeof window.showToast === 'function') {
-            window.showToast("🎉 Účet úspěšně propojen s Facebookem! Příště se přihlásíš 1 klikem.", false);
-        }
-        const store = Alpine.store('appState');
-        if (store) store.canLinkFacebook = false;
-    } catch (err) {
-        if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') return;
-        console.error("Chyba propojení s Facebookem:", err);
-        if (typeof window.showToast === 'function') {
-            if (err.code === 'auth/credential-already-in-use') {
-                window.showToast("🛑 Tento Facebook účet už používá jiný hráč!", true);
-            } else {
-                window.showToast("❌ Chyba propojení: " + err.message, true);
-            }
-        }
-    }
-};
-
 // 🎓 ZÁPIS DOKONČENÍ PRŮVODCE DO CLOUDU (FIRESTORE)
 window.completeTutorial = async () => {
     const user = window.auth?.currentUser;
@@ -221,26 +194,6 @@ window.loginWithGoogle = async () => {
     }
 };
 window.registerWithGoogle = window.loginWithGoogle;
-
-// 🔵 2. PŘIHLÁŠENÍ & REGISTRACE PŘES FACEBOOK (ČISTÝ STANDARDNÍ TOK)
-window.loginWithFacebook = async () => {
-    const errorBox = document.getElementById('loginError');
-    if (errorBox) errorBox.style.display = 'none';
-
-    try {
-        const provider = new FacebookAuthProvider();
-        provider.addScope('email');
-        provider.addScope('public_profile');
-        await signInWithPopup(window.auth, provider);
-    } catch (error) {
-        if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') return;
-        console.error("Chyba Facebook přihlášení:", error.message);
-        if (typeof window.showToast === 'function') {
-            window.showToast("❌ Chyba Facebook: " + error.message, true);
-        }
-    }
-};
-window.registerWithFacebook = window.loginWithFacebook;
 
 // ✉️ 5. REGISTRACE POMOCÍ E-MAILU A HESLA
 window.registerWithEmail = async () => {
@@ -557,7 +510,6 @@ const vykonejBezpecnyAuthRouting = (user) => {
         store.isSuperAdmin = userData?.isSuperAdmin === true;
         store.isAdmin = userData?.isAdmin === true || store.isSuperAdmin;
         store.canLinkGoogle = !user.providerData.some(p => p.providerId === 'google.com');
-        store.canLinkFacebook = !user.providerData.some(p => p.providerId === 'facebook.com');
         store.leagueOrder = userData?.leagueOrder || [];
         store.lastLeagueOrderChange = userData?.lastLeagueOrderChange?.toMillis ? userData.lastLeagueOrderChange.toMillis() : (userData?.lastLeagueOrderChange || 0);
 

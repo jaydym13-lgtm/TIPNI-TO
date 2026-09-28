@@ -190,6 +190,23 @@ const registerNicknameCF = onCall({ cors: true }, async (request) => {
 
     await userDocRef.set(userPayload, { merge: true });
 
+    // ⚡ RTDB SYNCHRONIZACE: Okamžitý zápis nového hráče do admin_roster pro 0 reads režim SuperAdminu
+    try {
+      const { getDatabase } = require("firebase-admin/database");
+      await getDatabase().ref(`admin_roster/${uid}`).set({
+        nickname: rawNickname,
+        email: email,
+        leagues: userPayload.leagues,
+        isAdmin: userPayload.isAdmin === true,
+        isSuperAdmin: userPayload.isSuperAdmin === true,
+        showSurveys: true,
+        notifyUntipped: false,
+        lastSeen: null
+      });
+    } catch (rtdbErr) {
+      console.warn("RTDB sync error při registraci přezdívky:", rtdbErr.message);
+    }
+
     return { success: true, nickname: rawNickname };
   } catch (error) {
     if (error instanceof HttpsError) throw error;

@@ -2014,6 +2014,14 @@ const updateMatchDateCF = onCall({
 
     await cinkniRtdbMajak(leagueName, "rozpis");
 
+    // ⏰ CLOUD TASKS: Okamžité přeplánování budíků T-62 (notifikace) a T-2 (wake-up) pro nový termín
+    try {
+      const { naplanujBudikProKickoff } = require("./tasks");
+      await naplanujBudikProKickoff(parsedDate.getTime());
+    } catch (taskErr) {
+      console.warn("Nepodařilo se přeplánovat budík Cloud Tasks:", taskErr.message);
+    }
+
     return { success: true, message: "Termín zápasu bezpečně upraven a synchronizován!" };
   } catch (error) {
     console.error("Chyba při změně data zápasu:", error);

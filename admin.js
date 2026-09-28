@@ -418,29 +418,27 @@ window.deleteMatch = (matchId) => {
     const sezonaId = store?.activeSeason || window.SEZONA_ID || "2026_2027";
     if (!activeAdminLeague) return;
 
-    const modalOverlay = document.createElement('div');
-    modalOverlay.id = `custom-confirm-modal-${matchId}`;
-    modalOverlay.style = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); z-index: 11000; display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);";
-
-    modalOverlay.innerHTML = `
-        <div style="background: #1f2937; border: 4px solid #dc2626; border-radius: 20px; padding: 30px 20px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7); color: white; font-family: 'Segoe UI', sans-serif;">
-            <h3 style="font-family: 'Oswald', sans-serif; color: #dc2626; font-size: 1.6rem; margin: 0 0 15px 0; text-transform: uppercase; letter-spacing: 1px;">🚨 POTVRZENÍ SMAZÁNÍ</h3>
-            <p style="font-size: 0.95rem; color: #9ca3af; line-height: 1.5; margin: 0 0 25px 0;">
+    const modalContent = `
+        <div style="padding: 15px; text-align: center; color: #ffffff;">
+            <p style="font-size: 0.95rem; color: #9ca3af; line-height: 1.5; margin: 0 0 20px 0;">
                 Opravdu chceš tento zápas trvale vymazat?<br>
                 <span style="color: #f87171; font-weight: bold;">Zápas bude okamžitě vyříznut z databáze i ze serveru R2!</span>
             </p>
-            <div style="display: flex; gap: 12px; justify-content: center;">
-                <button id="confirm-modal-cancel" style="background: #4b5563; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; cursor: pointer; text-transform: uppercase;">Zrušit</button>
-                <button id="confirm-modal-delete" style="background: #dc2626; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; cursor: pointer; text-transform: uppercase;">Smazat</button>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button class="action-btn" style="margin: 0; background: #4b5563; padding: 10px 16px; font-size: 0.85rem; font-family: 'Oswald', sans-serif; width: auto; border-radius: 6px;" onclick="this.closest('.spy-modal-overlay').remove()">ZRUŠIT</button>
+                <button id="confirm-modal-delete-btn" class="action-btn" style="margin: 0; background: #dc2626; border: 1px solid #ef4444; padding: 10px 16px; font-size: 0.85rem; font-family: 'Oswald', sans-serif; width: auto; border-radius: 6px;">SMAZAT</button>
             </div>
         </div>
     `;
 
-    document.body.appendChild(modalOverlay);
-    modalOverlay.querySelector('#confirm-modal-cancel').onclick = () => { modalOverlay.remove(); };
+    window.openGlobalUiModal("🚨 POTVRZENÍ SMAZÁNÍ", modalContent);
 
-    modalOverlay.querySelector('#confirm-modal-delete').onclick = async () => {
-        modalOverlay.remove();
+    const btnConfirm = document.getElementById('confirm-modal-delete-btn');
+    if (!btnConfirm) return;
+
+    btnConfirm.onclick = async () => {
+        const overlay = btnConfirm.closest('.spy-modal-overlay');
+        if (overlay) overlay.remove();
 
         if (store.rozpisData?.zapasyMapa?.[matchId]) {
             delete store.rozpisData.zapasyMapa[matchId];
@@ -1260,28 +1258,27 @@ window.purgeUserAbsolute = (uid) => {
     const uData = uDoc ? (typeof uDoc.data === 'function' ? uDoc.data() : uDoc) : {};
     const nickname = uData.nickname || 'Hráč';
 
-    const modalOverlay = document.createElement('div');
-    modalOverlay.style = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); z-index: 11000; display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);";
-
-    modalOverlay.innerHTML = `
-        <div style="background: #1f2937; border: 4px solid #dc2626; border-radius: 20px; padding: 30px 20px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7); color: white; font-family: 'Segoe UI', sans-serif;">
-            <h3 style="font-family: 'Oswald', sans-serif; color: #dc2626; font-size: 1.6rem; margin: 0 0 15px 0; text-transform: uppercase; letter-spacing: 1px;">🚨 SERVEROVÝ PURGE HRÁČE</h3>
-            <p style="font-size: 0.95rem; color: #9ca3af; line-height: 1.5; margin: 0 0 25px 0;">
+    const modalContent = `
+        <div style="padding: 15px; text-align: center; color: #ffffff;">
+            <p style="font-size: 0.95rem; color: #9ca3af; line-height: 1.5; margin: 0 0 20px 0;">
                 Opravdu chceš trvale zničit účet hráče <span style="color: #ffffff; font-weight: bold;">${nickname}</span>?<br>
                 <span style="color: #f87171; font-weight: bold;">Tato akce přes Firebase Admin SDK smaže jeho profil z Auth modulu a VŠECHNY jeho tipy i bonusy ze všech soutěží! Akce je nevratná.</span>
             </p>
-            <div style="display: flex; gap: 12px; justify-content: center;">
-                <button id="purge-modal-cancel" style="background: #4b5563; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; cursor: pointer; text-transform: uppercase;">Zrušit</button>
-                <button id="purge-modal-confirm" style="background: #dc2626; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; cursor: pointer; text-transform: uppercase;">ODPÁLIT PURGE</button>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button class="action-btn" style="margin: 0; background: #4b5563; padding: 10px 16px; font-size: 0.85rem; font-family: 'Oswald', sans-serif; width: auto; border-radius: 6px;" onclick="this.closest('.spy-modal-overlay').remove()">ZRUŠIT</button>
+                <button id="confirm-purge-user-btn" class="action-btn" style="margin: 0; background: #dc2626; border: 1px solid #ef4444; padding: 10px 16px; font-size: 0.85rem; font-family: 'Oswald', sans-serif; width: auto; border-radius: 6px;">ODPÁLIT PURGE</button>
             </div>
         </div>
     `;
 
-    document.body.appendChild(modalOverlay);
-    modalOverlay.querySelector('#purge-modal-cancel').onclick = () => { modalOverlay.remove(); };
+    window.openGlobalUiModal("🚨 SERVEROVÝ PURGE HRÁČE", modalContent);
 
-    modalOverlay.querySelector('#purge-modal-confirm').onclick = async () => {
-        modalOverlay.remove();
+    const btnConfirm = document.getElementById('confirm-purge-user-btn');
+    if (!btnConfirm) return;
+
+    btnConfirm.onclick = async () => {
+        const overlay = btnConfirm.closest('.spy-modal-overlay');
+        if (overlay) overlay.remove();
 
         const rowEl = document.getElementById(`user-row-${uid}`);
         if (rowEl) rowEl.remove();

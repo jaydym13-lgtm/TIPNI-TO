@@ -1,69 +1,69 @@
-# ⚽ TIPNI TO! – Moderní PWA Sportovní Tipovačka
+# ⚽ TIPNI TO! – PWA Sportovní Tipovačka
 
 [![PWA Ready](https://img.shields.io/badge/PWA-Ready-10b981?style=for-the-badge&logo=pwa)](https://tipni-to.netlify.app)
 [![Firebase](https://img.shields.io/badge/Firebase-v11-ffca28?style=for-the-badge&logo=firebase)](https://firebase.google.com)
 [![Cloudflare R2](https://img.shields.io/badge/Storage-Cloudflare_R2-f38020?style=for-the-badge&logo=cloudflare)](https://cloudflare.com)
-[![License](https://img.shields.io/badge/License-Proprietary-blue?style=for-the-badge)](#)
 
-Komplexní multi-ligová komunitní tipovací platforma vyvinutá s důrazem na **extrémní výkon, nulové zbytečné databázové dotazy (0 Firestore Reads architecture)** a offline-first přístup.
+Multi-ligová komunitní tipovací platforma pro fotbal a hokej postavená na distribuci statických dat přes Cloudflare R2 a reaktivním majáku ve Firebase Realtime Database.
 
-🔗 **Živé demo aplikace:** [https://tipni-to.netlify.app](https://tipni-to.netlify.app)
-
----
-
-## 🏛️ Klíčové architektonické pilíře
-
-Projekt byl od základů navržen tak, aby minimalizoval provozní náklady při zachování okamžité (sub-second) odezvy v reálném čase pro desítky až stovky souběžně tipujících hráčů.
-
-### 1. Hybridní distribuce dat (Cloudflare R2 + Firebase RTDB Maják)
-* **0 Firestore Reads při prohlížení:** Herní rozpisy, ligové tabulky a souhrny jsou servírovány jako komprimované statické JSONy z globální sítě **Cloudflare R2** s minimální latencí.
-* **WebSocket Maják (10–20 ms):** Namísto drahých trvalých posluchačů ve Firestore naslouchá frontend na odlehčený signální uzel ve **Firebase Realtime Database** (`system/leagues_pulse`). Při změně skóre nebo vyhodnocení zápasu maják vyšle jednorázový signál a aplikace bleskově stáhne aktualizovaný balík z R2.
-* **E-Tag Image Revalidation:** Znaky týmů, trofeje a stadiony jsou lokálně mezipaměťovány v Service Workeru a ověřovány podmíněným dotazem s HTTP ETagem.
-
-### 2. Spolehlivý stavový backend (Daemon & Cloud Functions)
-* **Node.js 22 Background Daemon (`bot.mjs`):** Trvale běžící služba na platformě Render hlídá termíny zápasů přes live stream SportAPI7, provádí automatické zmrazení tipů v T-0 výkopu a generuje agregované žebříčky.
-* **Atomické Cloud Functions v2:** Citlivé operace (zápis tipů, změna práv, GDPR anonymizace a loutkovodič pro správce) běží izolovaně v evropském regionu `europe-west1`.
-* **Google Cloud Tasks:** Automatické plánování úloh s milisekundovou přesností:
-  * **T-62 min:** Cílené odeslání Web Push notifikace hráčům, kteří na nadcházející zápas dosud nenatipovali.
-  * **T-2 min:** Keep-alive budík pro probuzení backendového daemona před zahájením utkání.
+🔗 **Aplikace:** [https://tipni-to.netlify.app](https://tipni-to.netlify.app)
 
 ---
 
-## 🎮 Unikátní herní funkce
+## 🏛️ Architektura a tok dat
 
-* **🃏 Sběratelské FUT Karty hráčů:** Automatický výpočet kariérního OVR ratingu (1–99), herního archetypu (*Odstřelovač, Taktik, Predátor...*) a 6 klíčových metrik z reálných tipů. Možnost 3D otočení karty a generování exportovatelného grafického štítku pro sociální sítě.
-* **🏛️ Globální Síň slávy:** Celkový žebříček napříč všemi soutěžemi s koeficientem všestrannosti podle počtu hraných lig.
-* **⚔️ H2H Duel Aréna:** Přímé porovnání 1 na 1 mezi kterýmikoliv dvěma tipéry (srovnání 18 metrik, vzájemná bilance kol, forma a špionáž opačných tipů).
-* **🏆 Pohárová pyramida (Tipni Cup):** Paralelní pohárový turnaj běžící automaticky z běžných ligových tipů. Využívá Hadí draft pro nasazení do 4 skupin a vícestupňový vyřazovací K.O. pavouk na odvety.
-* **👀 Ligový Radar:** Automatická detekce extrémů sezóny – *Zlatý důl* (bodově nejbohatší zápas), *Totální výbuchy* (0 bodů pro celou soutěž), *Vlci samotáři* (jediný správný tipér proti davu), *Smolař sezóny* a analýza štědrosti klubů.
-* **📲 PWA & Offline-First:** Plná podpora instalace na plochu telefonu (Android/iOS), spouštění na celou obrazovku bez lišt prohlížeče a ochrana rozpracovaných formulářů před nechtěným opuštěním.
+Systém je rozdělený na tři části: klientskou PWA aplikaci, serverless backend pro zápisy a stavového bota na platformě Render.
+
+### 1. Klientská distribuce (Cloudflare R2 + RTDB Maják)
+* **Čtení dat bez zátěže databáze:** Rozpisy zápasů, ligové tabulky a souhrny kol se nestahují z Firestore. Frontend načítá statické JSON soubory (`rozpis.json`, `leaderboard.json`, `hall_of_fame.json`) přímo z CDN Cloudflare R2.
+* **WebSocket signál (Firebase RTDB):** Frontend má otevřený posluchač na odlehčený uzel v Realtime Database (`system/leagues_pulse`). Jakmile se změní stav zápasu nebo proběhne přepočet, maják pošle timestamp a aplikace stáhne čerstvý balík z R2.
+
+### 2. Správa a probouzení bota (Render Free Tier + Cloud Tasks)
+* **Ekonomický běh:** Stavový daemon (`bot.mjs`) běží na bezplatném tarifu platformy Render. Pokud se nehrají zápasy, instance usíná.
+* **Řízené probouzení (Google Cloud Tasks):**
+  * **T-62 min:** Cloud Function odešle Web Push notifikaci hráčům, kteří na nadcházející zápas ještě nemají natipováno.
+  * **T-2 min:** HTTP budík probudí instanci bota na Renderu přes endpoint `/cron`.
+* **Udržení v chodu:** Pokud je v některé lize zápas ve stavu `IN_PLAY` nebo těsně před ním, bot zůstává aktivní, v minutové smyčce stahuje live feed ze SportAPI7 a v reálném čase počítá tabulky na R2.
+
+### 3. Zabezpečené operace (Cloud Functions v2)
+* Ukládání tipů, dlouhodobých bonusů, správa práv uživatelů a administrátorský zápis (Loutkovodič) běží přes Cloud Functions v regionu `europe-west1`.
+* Uživatelé nemají přímý zápisový přístup k ligovým výsledkům ani cizím tipům.
 
 ---
 
-## 🛠️ Použitý technologický stack
+## 🎮 Herní mechaniky
 
-| Oblast | Technologie |
+* **FUT Karty hráčů:** Výpočet OVR ratingu (1–99), herního archetypu (*Odstřelovač, Taktik, Predátor...*) a statistik přímo z reálných tipů. Možnost 3D rotace karty a exportu do PNG.
+* **Síň slávy:** Celkový žebříček napříč soutěžemi s koeficientem podle počtu aktivních lig hráče.
+* **H2H Duel:** Přímé porovnání dvou hráčů (forma z posledních 5 zápasů, vzájemná bilance kol, shoda tipů a přímé souboje).
+* **Tipni Cup:** Paralelní pohárová soutěž navázaná na ligové tipy (Hadí draft pro nasazení do skupin + vyřazovací K.O. pavouk).
+* **Ligový Radar:** Automatické vyhodnocení milníků – Zlatý důl (zápas s nejvíce body), Totální výbuchy (0 bodů pro celou soutěž), Vlci samotáři (jediný správný tipér) a úspěšnost tipů na jednotlivé kluby.
+* **PWA režim:** Možnost instalace na plochu (Android/iOS), běh přes Service Worker a záchytný dialog chránící rozepsané tipy před zavřením stránky.
+
+---
+
+## 🛠️ Použité technologie
+
+| Vrstva | Technologie |
 |---|---|
-| **Frontend** | Vanilla JavaScript (ES6 Modules), Alpine.js v3, CSS3 Variables (Dark/Light mode) |
-| **PWA & Offline** | Service Worker (Stale-While-Revalidate + Cache-First), Web App Manifest |
-| **BaaS / Databáze** | Firebase Authentication, Cloud Firestore, Realtime Database |
-| **Cloud & Storage** | Cloudflare R2 (S3 API), Google Cloud Tasks, Netlify Hosting |
-| **Backend & Daemon** | Node.js 22 LTS, Cloud Functions for Firebase v2, Express HTTP Probe |
-| **Data Engine** | SportAPI7 (SofaScore feed), RapidAPI |
+| **Frontend** | Vanilla JavaScript (ES6 Modules), Alpine.js v3, CSS3 |
+| **BaaS & DB** | Firebase Auth, Cloud Firestore, Realtime Database |
+| **Storage & Hosting**| Cloudflare R2 (S3 API), Netlify |
+| **Backend & Úlohy** | Node.js 22, Cloud Functions for Firebase v2, Google Cloud Tasks |
+| **Worker / Bot** | Node.js (Render Free Service), Express HTTP probe |
+| **Datové API** | SportAPI7 (RapidAPI) |
 
 ---
 
-## 🔒 Bezpečnost & Data Privacy (GDPR)
+## 🔒 Bezpečnost a správa dat
 
-* **Role-Based Access Control (RBAC):** Přísně oddělené role běžného hráče, administrátora a SuperAdmina řízené přes Firebase Custom Claims a Firestore Security Rules.
-* **Anti-Spam & Rate Limiting:** Klientské i serverové časové zámky (cooldowny) na odesílání tipů a změnu pořadí soutěží.
-* **In-App Account Deletion:** Plná shoda s pravidly Google Play a GDPR – možnost okamžitého smazání účtu s automatickou anonymizací historických herních bodů pro zachování integrity tabulek ostatních hráčů.
+* **Role (RBAC):** Oddělení rolí hráč, administrátor a SuperAdmin přes Firebase Custom Claims.
+* **Ochrana proti spamu:** Serverové i klientské časové zámky (cooldowny) na odesílání tipů.
+* **GDPR výmaz:** Možnost smazání účtu přímo z aplikace s anonymizací odehraných bodů, aby nedošlo k poškození historických výsledků soutěže.
 
 ---
 
 ## 👨‍💻 Autor
 
-Vyvinuto jako nezávislý komunitní projekt zaměřený na čistý kód, moderní webové standardy a škálovatelnou cloudovou architekturu.
-
 * **GitHub:** [@jaydym13-lgtm](https://github.com/jaydym13-lgtm)
-* **Web projektu:** [tipni-to.netlify.app](https://tipni-to.netlify.app)
+* **Web:** [tipni-to.netlify.app](https://tipni-to.netlify.app)

@@ -26,6 +26,7 @@
 * **Ligový Radar:** Automatická analýza extrémů sezóny – bodově nejbohatší zápas kola (Zlatý důl), zápasy s nulovým ziskem pro celou soutěž (Totální výbuch), ojedinělé trefy jediného hráče proti všem (Vlci samotáři) i statistika úspěšnosti tipů na jednotlivé kluby.
 * **PWA a ochrana formulářů:** Aplikaci lze nainstalovat na plochu mobilu (Android i iOS) pro běh na celou obrazovku bez lišt prohlížeče. Formulářový interceptor navíc hlídá rozepsané tipy a zabrání jejich nechtěnému zahození při překliku nebo gestu zpět.
 * **Admin modul „Loutkovodič“:** Praktická asistence pro správce ligy v reálném provozu – možnost v nouzi podat či upravit tip za kteréhokoliv hráče (např. když někteří lidé neumí nebo nechtějí používat aplikace v mobilu). Vše probíhá bezpečně přes autorizovanou Cloud Function bez manuálních zásahů do databáze.
+* **Export pro sociální sítě:** Generování čistých obrázkových snapshotů (PNG) přímo v prohlížeči pomocí HTML5 Canvas. Hráči si mohou jedním kliknutím stáhnout svou aktuální FUT kartu, administrátoři i ligovou tabulku a souhrn odehraného kola a okamžitě je nasdílet do komunitních skupin na Facebooku, WhatsAppu či Messengeru bez nutnosti dělat ořezy ze snímků obrazovky.
 
 ---
 
@@ -33,7 +34,7 @@
 
 * **Distribuce dat přes Cloudflare R2:** Rozpisy zápasů, ligové tabulky a souhrny kol se nečtou přímo z databáze Firestore. Frontend je stahuje jako statické JSON soubory z CDN úložiště Cloudflare R2.
 * **Realtime maják (Firebase RTDB):** Frontend drží jedno odlehčené WebSocket spojení na uzel v Realtime Database (`system/leagues_pulse`). Když padne gól nebo administrátor upraví zápas, maják vyšle krátký impuls a klient si stáhne čerstvý JSON z R2.
-* **Backend daemon a sportovní feed:** Zápasový stavový skript (`bot.mjs`) běží na instanci platformy Render a zpracovává data ze SportAPI7. Mimo hrací dny usíná a před zápasy ho budí plánovač z Google Cloud Tasks, který zároveň rozesílá Web Push notifikace hráčům bez natipováno. Během rozehraných zápasů zůstává aktivní v minutové smyčce a průběžně aktualizuje tabulky.
+* **Backend daemon a sportovní feed:** Zápasový stavový skript (`bot.mjs`) běží na instanci platformy Render a zpracovává data ze SportAPI7. Mimo hrací dny usíná a před zápasy ho budí plánovač z Google Cloud Tasks, který zároveň rozesílá Web Push notifikace hráčům bez natipováných zápasů (pokud mají zapnuté push notifikace). Během rozehraných zápasů zůstává aktivní v minutové smyčce a průběžně aktualizuje tabulky.
 * **Zabezpečené zápisy (Cloud Functions v2):** Zápis tipů, správa uživatelských rolí (RBAC), administrátorské zásahy i kompletní anonymizace profilu při smazání účtu podle GDPR probíhají přes Cloud Functions na Node.js 22.
 
 | Vrstva | Použité technologie |

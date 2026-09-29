@@ -67,7 +67,7 @@
 ## 🚀 Plánovaný rozvoj
 
 * **Uzavřené miniligy:** Podpora soukromých skupin v rámci stejné soutěže, kde mohou přátelé nebo kolegové z práce tipovat na stejném rozpisu, ale v oddělené soukromé tabulce.
-* **Modulární rozšiřování soutěží:** Engine je navržen tak, aby umožňoval rychlé přidání jakékoliv další fotbalové či hokejové ligy pouze nadefinováním bodovací matice a ID turnaje.
+* **Rozšiřování soutěží:** Engine je navržen tak, aby umožňoval rychlé přidání jakékoliv další fotbalové či hokejové ligy.
 
 ---
 

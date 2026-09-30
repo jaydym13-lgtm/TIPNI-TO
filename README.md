@@ -50,19 +50,24 @@
 
 ## 📸 Náhledy z aplikace
 
+| 🔐 Vstup do arény | 🏟️ Výběr soutěže (Katalog lig) |
+| :---: | :---: |
+| <img width="450" height="1000" alt="Screenshot_2026-09-30-07-23-53-747_com android chrome" src="https://github.com/user-attachments/assets/804a0273-0872-48d7-9a2c-a963b39375f4" /> | <img width="450" height="1000" alt="Screenshot_2026-09-30-07-24-08-564_com android chrome" src="https://github.com/user-attachments/assets/136140dd-d438-4d9a-ab6e-1b040716c303" /> |
+| *Přihlášení, Google účet a instalace PWA na plochu* | *Výběr soutěže (rozšířený fanouškovský režim s grafikou)* |
+
 | 🃏 3D FUT Karta tipéra | 🏆 Živé ligové pořadí |
 | :---: | :---: |
-| ![FUT Karta](https://via.placeholder.com/450x650/0f172a/38bdf8?text=FUT+Karta+hráče) | ![Pořadí](https://via.placeholder.com/450x650/0f172a/10b981?text=Živé+pořadí) |
+| <img width="450" height="1000" alt="fut karta" src="https://github.com/user-attachments/assets/75d49b79-f7dc-46c9-b972-9326d05cdf13" /> | <img width="450" height="1000" alt="live" src="https://github.com/user-attachments/assets/718ae931-bcef-4351-bafd-98fdca3300ba" /> |
 | *OVR rating, atributy a herní styl* | *Průběžný LIVE přepočet během hry* |
 
 | ⚔️️ H2H Duel 1 na 1 | 🌳 Pohár (Tipni Cup) |
 | :---: | :---: |
-| ![H2H Duel](https://via.placeholder.com/450x650/0f172a/ef4444?text=H2H+Duel) | ![Pohár](https://via.placeholder.com/450x650/0f172a/ea580c?text=KO+Pavouk+Poháru) |
+| <img width="450" height="1000" alt="H2H" src="https://github.com/user-attachments/assets/fb2e326b-9cda-40c2-9a4d-ac0d5f54c000" /> | <img width="450" height="1000" alt="pohar" src="https://github.com/user-attachments/assets/4115d9db-e94c-4ab5-b224-a584c09bc005" /> |
 | *Přímé srovnání soupeřů na 18 metrik* | *Hadí draft skupin a vyřazovací pavouk* |
 
 | 👀 Ligový Radar & Extrémy | 📱 Herní rozpis & Kurzy |
 | :---: | :---: |
-| ![Radar](https://via.placeholder.com/450x650/0f172a/fbbf24?text=Ligový+Radar) | ![Rozpis](https://via.placeholder.com/450x650/0f172a/10b981?text=Herní+rozpis) |
+| <img width="450" height="1000" alt="radar" src="https://github.com/user-attachments/assets/cfef77c3-8586-4eeb-9b4a-5d95cab395c4" /> | <img width="450" height="1000" alt="rozpis" src="https://github.com/user-attachments/assets/7f046b40-9e36-45f1-a19d-8b19bee7e2cc" /> |
 | *Zlatý důl, Vlci samotáři i kluby* | *Zadávání tipů, 1-X-2 kurzy a zámky* |
 
 ---
@@ -74,7 +79,10 @@
 
 ---
 
-## 👨‍💻 Autor a odkazy
+## 👨‍💻 Autor a poděkování
 
+* **Vývoj a architektura:** [@jaydym13-lgtm](https://github.com/jaydym13-lgtm)
+* **Herní pravidla a bodový balanc:**
+  * ⚽ **Švéřa** – systém bodování fotbalových soutěží
+  * 🏒 **Ďoubas** – systém bodování hokejových soutěží 
 * **Web aplikace:** [tipni-to.netlify.app](https://tipni-to.netlify.app)
-* **GitHub profil:** [@jaydym13-lgtm](https://github.com/jaydym13-lgtm)

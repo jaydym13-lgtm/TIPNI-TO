@@ -50,17 +50,20 @@
 
 ## 📸 Náhledy z aplikace
 
-<!-- Zde můžeš v GitHub editoru (přes ikonu tužky) přetáhnout vlastní screenshoty přímo do tabulky -->
+| 🃏 3D FUT Karta tipéra | 🏆 Živé ligové pořadí |
+| :---: | :---: |
+| ![FUT Karta](https://via.placeholder.com/450x650/0f172a/38bdf8?text=FUT+Karta+hráče) | ![Pořadí](https://via.placeholder.com/450x650/0f172a/10b981?text=Živé+pořadí) |
+| *OVR rating, atributy a herní styl* | *Průběžný LIVE přepočet během hry* |
 
-| 🃏 3D FUT Karta tipéra | 🏆 Živé ligové pořadí | ⚔️ H2H Duel 1 na 1 |
-| :---: | :---: | :---: |
-| ![FUT Karta](https://via.placeholder.com/400x550/0f172a/38bdf8?text=FUT+Karta+hráče) | ![Pořadí](https://via.placeholder.com/400x550/0f172a/10b981?text=Živé+pořadí) | ![H2H Duel](https://via.placeholder.com/400x550/0f172a/ef4444?text=H2H+Duel) |
-| *OVR rating, atributy a herní styl* | *Průběžný LIVE přepočet během hry* | *Přímé srovnání soupeřů na 18 metrik* |
+| ⚔️️ H2H Duel 1 na 1 | 🌳 Pohár (Tipni Cup) |
+| :---: | :---: |
+| ![H2H Duel](https://via.placeholder.com/450x650/0f172a/ef4444?text=H2H+Duel) | ![Pohár](https://via.placeholder.com/450x650/0f172a/ea580c?text=KO+Pavouk+Poháru) |
+| *Přímé srovnání soupeřů na 18 metrik* | *Hadí draft skupin a vyřazovací pavouk* |
 
-| 🌳 Pohár (Tipni Cup) | 👀 Ligový Radar & Extrémy | 📱 Herní rozpis & Kurzy |
-| :---: | :---: | :---: |
-| ![Pohár](https://via.placeholder.com/400x550/0f172a/ea580c?text=KO+Pavouk+Poháru) | ![Radar](https://via.placeholder.com/400x550/0f172a/fbbf24?text=Ligový+Radar) | ![Rozpis](https://via.placeholder.com/400x550/0f172a/10b981?text=Herní+rozpis) |
-| *Hadí draft skupin a vyřazovací pavouk* | *Zlatý důl, Vlci samotáři i kluby* | *Zadávání tipů, 1-X-2 kurzy a zámky* |
+| 👀 Ligový Radar & Extrémy | 📱 Herní rozpis & Kurzy |
+| :---: | :---: |
+| ![Radar](https://via.placeholder.com/450x650/0f172a/fbbf24?text=Ligový+Radar) | ![Rozpis](https://via.placeholder.com/450x650/0f172a/10b981?text=Herní+rozpis) |
+| *Zlatý důl, Vlci samotáři i kluby* | *Zadávání tipů, 1-X-2 kurzy a zámky* |
 
 ---
 

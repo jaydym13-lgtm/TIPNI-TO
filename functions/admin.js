@@ -26,21 +26,26 @@ async function cinkniRtdbMajak(leagueName, typ = "all") {
 
 // 👑 FUNKCE 1: Správa oprávnění uživatelů
 const manageUserPermissionsCF = onCall(async (request) => {
-  if (!request.auth || (!request.auth.token.isAdmin && !request.auth.token.isSuperAdmin)) {
-    throw new HttpsError("permission-denied", "Pouze prověřený admin smí měnit ligy a práva!");
+  // 🛡️ POUZE SUPER ADMIN SMÍ MĚNIT LICENCE A ROLE!
+  if (!request.auth || !request.auth.token.isSuperAdmin) {
+    throw new HttpsError("permission-denied", "Pouze Super Admin má právo udělovat licence a administrátorská práva!");
   }
 
-  const { targetUid, isAdminRole, leagues } = request.data;
+  const { targetUid, isAdminRole, leagues, adminLeagues } = request.data;
+  const safeAdminLeagues = Array.isArray(adminLeagues) ? adminLeagues : [];
 
   try {
     await auth.setCustomUserClaims(targetUid, {
       isAdmin: isAdminRole,
-      leagues: leagues
+      isSuperAdmin: request.auth.token.isSuperAdmin && targetUid === request.auth.uid,
+      leagues: leagues,
+      adminLeagues: safeAdminLeagues
     });
 
     await db.collection("users").doc(targetUid).update({
       isAdmin: isAdminRole,
-      leagues: leagues
+      leagues: leagues,
+      adminLeagues: safeAdminLeagues
     });
 
     const vsechnyDostupneLigy = ['Chance Liga', 'Premier League', 'Liga mistrů', 'MS ve fotbale', 'Tipsport Extraliga', 'MS v hokeji'];
@@ -58,7 +63,8 @@ const manageUserPermissionsCF = onCall(async (request) => {
     try {
       await getDatabase().ref(`admin_roster/${targetUid}`).update({
         isAdmin: isAdminRole,
-        leagues: leagues
+        leagues: leagues,
+        adminLeagues: safeAdminLeagues
       });
     } catch (rtdbErr) {
       console.warn("RTDB sync varování:", rtdbErr.message);
@@ -1686,6 +1692,26 @@ const saveProxyDataCF = onCall({
   const { kanadske } = request.data;
   const { updateBonus } = request.data;
 
+  const isCallerSuperAdmin = request.auth.token.isSuperAdmin === true;
+  const callerAdminLeagues = request.auth.token.adminLeagues || [];
+
+  // 🛡️ 1. Ověření, že administrátor smí spravovat zapisovanou ligu
+  if (!isCallerSuperAdmin && !callerAdminLeagues.includes(leagueName)) {
+    throw new HttpsError("permission-denied", `Nemáš administrátorská oprávnění pro soutěž ${leagueName}!`);
+  }
+
+  // 🛡️ 2. Ověření, že cíl není Super Admin a není administrátorem v této lize
+  const targetDoc = await db.collection("users").doc(targetUid).get();
+  if (targetDoc.exists) {
+    const tData = targetDoc.data() || {};
+    if (tData.isSuperAdmin === true) {
+      throw new HttpsError("permission-denied", "Účet Super Admina nelze ovládat přes Loutkovodiče!");
+    }
+    if (!isCallerSuperAdmin && (tData.adminLeagues || []).includes(leagueName)) {
+      throw new HttpsError("permission-denied", `Hráč je v soutěži ${leagueName} rovněž administrátorem a nelze jej loutkovodit!`);
+    }
+  }
+
   try {
     const userSezonaRef = db.collection("users").doc(targetUid).collection("sezony").doc(sezonaId);
     const ligaKlic = leagueName.replace(/ /g, "_");
@@ -2394,6 +2420,111 @@ const toggleMatchPostponedCF = onCall({
   }
 });
 
+// 🔥 FUNKCE 13b: Přepnutí TOP zápasu (Firestore + rozpis.json na R2 + RTDB maják)
+const toggleTopMatchCF = onCall({
+  cors: true,
+  secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
+}, async (request) => {
+  if (!request.auth || (!request.auth.token.isAdmin && !request.auth.token.isSuperAdmin)) {
+    throw new HttpsError("permission-denied", "Pouze administrátor smí měnit TOP zápas!");
+  }
+
+  const { leagueName, matchId } = request.data;
+  const sezonaId = request.data.sezonaId || DEFAULT_SEASON_ID;
+
+  if (!leagueName || !matchId) {
+    throw new HttpsError("invalid-argument", "Chybí název ligy nebo ID zápasu!");
+  }
+
+  try {
+    const ligaKlic = leagueName.replace(/ /g, "_");
+    const zapasyColl = db.collection("ligy").doc(leagueName)
+      .collection("sezony").doc(sezonaId)
+      .collection("zapasy");
+
+    const targetDoc = await zapasyColl.doc(matchId).get();
+    if (!targetDoc.exists) {
+      throw new HttpsError("not-found", "Zápas nebyl nalezen!");
+    }
+
+    const targetData = targetDoc.data() || {};
+    const budeTop = !targetData.isTopMatch;
+    const targetKolo = String(targetData.kolo || "").trim();
+
+    const batch = db.batch();
+    const unTopMatchIds = [];
+
+    // Pojistka na max 1 TOP zápas na kolo: ostatním zápasům v tomtéž kole TOP vypneme
+    if (budeTop && targetKolo) {
+      const roundMatchesSnap = await zapasyColl.where("kolo", "==", targetKolo).get();
+      roundMatchesSnap.forEach(docSnap => {
+        if (docSnap.id !== matchId && docSnap.data().isTopMatch) {
+          batch.update(docSnap.ref, { isTopMatch: false });
+          unTopMatchIds.push(docSnap.id);
+        }
+      });
+    }
+
+    batch.update(zapasyColl.doc(matchId), { isTopMatch: budeTop });
+    await batch.commit();
+
+    // 📦 R2 SYNCHRONIZACE: Okamžitá úprava statického rozpis.json na Cloudflare R2
+    const r2Client = new S3Client({
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      },
+      region: "auto",
+    });
+
+    const rozpisKey = `sezony/${sezonaId}/${ligaKlic}/rozpis.json`;
+    try {
+      const getRes = await r2Client.send(new GetObjectCommand({
+        Bucket: "tipni-to-data",
+        Key: rozpisKey
+      }));
+      const rawText = await getRes.Body.transformToString();
+      const rozpisObj = JSON.parse(rawText);
+
+      if (rozpisObj && rozpisObj.zapasyMapa) {
+        unTopMatchIds.forEach(id => {
+          if (rozpisObj.zapasyMapa[id]) {
+            rozpisObj.zapasyMapa[id].isTopMatch = false;
+          }
+        });
+        if (rozpisObj.zapasyMapa[matchId]) {
+          rozpisObj.zapasyMapa[matchId].isTopMatch = budeTop;
+        }
+        rozpisObj.aktualizovano = new Date().toISOString();
+
+        await r2Client.send(new PutObjectCommand({
+          Bucket: "tipni-to-data",
+          Key: rozpisKey,
+          Body: JSON.stringify(rozpisObj),
+          ContentType: "application/json",
+          CacheControl: "no-cache, no-store, must-revalidate"
+        }));
+      }
+    } catch (e) {
+      console.warn("Nepodařilo se upravit TOP zápas v rozpis.json na R2:", e.message);
+    }
+
+    const pulsRef = db.collection("ligy").doc(leagueName).collection("stav").doc("puls");
+    await pulsRef.set({
+      verzeRozpisu: admin.firestore.FieldValue.increment(1),
+      aktualizovano: admin.firestore.Timestamp.now()
+    }, { merge: true });
+
+    await cinkniRtdbMajak(leagueName, "rozpis");
+
+    return { success: true, isTopMatch: budeTop, message: budeTop ? "Zápas označen jako TOP!" : "Označení TOP odebráno." };
+  } catch (error) {
+    console.error("Chyba při změně TOP zápasu:", error);
+    throw new HttpsError("internal", error.message);
+  }
+});
+
 // 🚚 FUNKCE 14: Jednorázová migrace všech uživatelů do RTDB admin_roster
 const syncAllUsersToRtdbCF = onCall({ cors: true }, async (request) => {
   if (!request.auth || (!request.auth.token.isAdmin && !request.auth.token.isSuperAdmin)) {
@@ -2489,6 +2620,7 @@ module.exports = {
   deleteMatchOddsCF,
   deleteMatchCF,
   toggleMatchPostponedCF,
+  toggleTopMatchCF,
   syncAllUsersToRtdbCF,
   deleteMyAccountCF
 };

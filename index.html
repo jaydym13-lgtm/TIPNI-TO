@@ -189,6 +189,10 @@
                         <span class="gm-btn-icon">👥</span>
                         <span class="gm-btn-text">UŽIVATELÉ</span>
                     </button>
+                        <button class="godmode-menu-btn btn-gm-matches" @click="window.openSuperAdminTab('matches')">
+                        <span class="gm-btn-icon">⚽</span>
+                        <span class="gm-btn-text">SPRAVOVAT ZÁPASY</span>
+                    </button>
                     <button class="godmode-menu-btn btn-gm-tools" @click="window.openSuperAdminTab('tools')">
                         <span class="gm-btn-icon">🔧</span>
                         <span class="gm-btn-text">ZÁCHRANA BODŮ</span>
@@ -400,7 +404,9 @@
                         
                         <!-- Pravá část: Podtext + Šipka -->
                         <div class="katalog-card-right">
-                            <span class="katalog-card-sub" x-text="$store.appState.getLeagueSubtext(liga)"></span>
+                            <span class="katalog-card-sub" 
+                                  :style="(!$store.appState.isSuperAdmin && !$store.appState.isGuest && !($store.appState._leagues || []).includes(liga)) ? 'color: #38bdf8; border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.12);' : ''"
+                                  x-text="(!$store.appState.isSuperAdmin && !$store.appState.isGuest && !($store.appState._leagues || []).includes(liga)) ? '👀 NAHLÉDNOUT DO HRY' : $store.appState.getLeagueSubtext(liga)"></span>
                             <span class="katalog-card-arrow">➔</span>
                         </div>
                     </button>
@@ -420,6 +426,11 @@
             <!-- 📜 BANNER ARCHIVU -->
             <div x-show="$store.appState.isArchived" x-cloak style="background: rgba(234, 88, 12, 0.15); border: 1px solid #ea580c; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; text-align: center; color: #f97316; font-family: 'Oswald', sans-serif; font-size: 0.85rem; font-weight: bold; letter-spacing: 0.5px;">
                 📜 TATO SEZÓNA JE V ARCHIVU (POUZE PRO ČTENÍ)
+            </div>
+
+            <!-- 👀 BANNER NEZÁVAZNÉHO NÁHLEDU (SHOWROOM) -->
+            <div x-show="!$store.appState.isEnrolledInSelectedLeague && !$store.appState.isArchived" x-cloak class="league-preview-banner">
+                👀 NEZÁVAZNÝ NÁHLED • TUTO SOUTĚŽ NEMÁŠ V LICENCI (TIPOVÁNÍ UZAMČENO)
             </div>
             
             <!-- 🎛️ INLINE MICRO-TOOLBAR -->
@@ -809,311 +820,12 @@
             <div class="leaderboard-tabs-wrapper" style="margin-bottom: 10px; width: 100%; box-sizing: border-box; display: flex; gap: 4px;">
                 <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 2px; font-size: 0.75rem;" :style="$store.appState.adminActiveTab === 'users' ? 'background: #059669; color: white; border-color: #10b981;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;'" @click="$store.appState.adminActiveTab='users'; $store.appState.adminOpenedUserId = null; window.renderAdminMatches();">UŽIVATELÉ</button>
                 <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 2px; font-size: 0.75rem;" :style="$store.appState.adminActiveTab === 'recalc' ? 'background: #dc2626; color: white; border-color: #f87171;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;'" @click="$store.appState.adminActiveTab='recalc'; $store.appState.adminOpenedUserId = null; window.renderAdminRecalc();">PŘEPOČET</button>
-                <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 2px; font-size: 0.75rem;" :style="($store.appState.adminActiveTab || 'matches') === 'matches' ? 'background: #2563eb; color: white; border-color: #60a5fa;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;'" @click="$store.appState.adminActiveTab='matches'; $store.appState.adminOpenedUserId = null; window.renderAdminMatches();">ZÁPASY</button>
                 <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 2px; font-size: 0.75rem;" :style="$store.appState.adminActiveTab === 'survey' ? 'background: #0284c7; color: white; border-color: #38bdf8;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;'" @click="$store.appState.adminActiveTab='survey'; $store.appState.adminOpenedUserId = null; window.renderAdminSurvey();">ANKETA</button>
             </div>
 
             <div id="adminTabContentArea" style="width:100%;">
                 <div x-show="$store.appState.adminActiveTab === 'survey'">
                     <div id="adminSurveyContainer"></div>
-                </div>
-                <div x-show="$store.appState.adminActiveTab === 'matches'">
-                    <div x-show="!$store.appState.selectedAdminLeague">
-                        <h2 style="font-family: 'Oswald', sans-serif; text-transform: uppercase; margin-top: 10px; margin-bottom: 14px; color: #fff; font-size: 1.1rem; text-align: left; letter-spacing: 0.5px;">Vyber soutěž k administraci zápasů:</h2>
-                        <div class="katalog-list-container">
-                            <template x-for="liga in ['Chance Liga', 'Premier League', 'Liga mistrů', 'Tipsport Extraliga', 'MS v hokeji', 'MS ve fotbale']" :key="liga">
-                                <button class="katalog-card-btn" 
-                                        :class="{
-                                            'card-pl': liga.toLowerCase().includes('premier'),
-                                            'card-chance': liga.toLowerCase().includes('chance'),
-                                            'card-ucl': liga.toLowerCase().includes('mistr') || liga.toLowerCase().includes('ucl'),
-                                            'card-extraliga': liga.toLowerCase().includes('extraliga'),
-                                            'card-hockey-wc': liga.toLowerCase().includes('hokeji'),
-                                            'card-national': liga.toLowerCase().includes('národů'),
-                                            'card-wc': liga.toLowerCase().includes('ms ve fotbale')
-                                        }"
-                                        @click="window.selectAdminLeague(liga)">
-                                    <div class="katalog-card-left">
-                                        <div class="katalog-card-logo-wrapper">
-                                            <img :src="window.getLeagueLogo(liga)" class="katalog-card-logo" alt="Logo" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='img/favicon192.png';">
-                                        </div>
-                                        <div class="katalog-card-info">
-                                            <span class="katalog-card-badge" x-text="window.getLeagueBadge(liga)"></span>
-                                            <div class="katalog-card-title" x-text="liga.toUpperCase()"></div>
-                                        </div>
-                                    </div>
-                                    <div class="katalog-card-right">
-                                        <span class="katalog-card-sub" x-text="$store.appState.getLeagueSubtext(liga)"></span>
-                                        <span class="katalog-card-arrow">➔</span>
-                                    </div>
-                                </button>
-                            </template>
-                        </div>
-                    </div>
-
-                    <div x-show="$store.appState.selectedAdminLeague">
-                        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                            <button class="nav-btn" @click="window.selectAdminLeague(null)" style="background:#4b5563; width:auto; padding:6px 14px; text-transform:uppercase; margin:0;">⬅ Výběr soutěže</button>
-                        </div>
-                        <h2 style="text-align: center; font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 1.25rem; color: #ffffff; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 15px 0; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap;">
-                            <span>⚙️ SPRÁVA ZÁPASŮ:</span>
-                            <span style="color: #fbbf24;" x-text="$store.appState.selectedAdminLeague?.toUpperCase()"></span>
-                        </h2>
-
-                        <div class="bonus-collapse-box" style="margin-bottom: 20px; border-color: #374151;">
-                            <button class="bonus-collapse-trigger" @click="$store.appState.adminMasterOpen = !$store.appState.adminMasterOpen" style="color: #60a5fa; border-color: #2563eb; font-weight: bold; background: #1f2937;">
-                                <span>⚙️ MOŽNOSTI SPRÁVY A NÁSTROJE LIGY</span>
-                                <span x-text="$store.appState.adminMasterOpen ? '▲' : '▼'"></span>
-                            </button>
-                            <div class="bonus-collapse-content" x-show="$store.appState.adminMasterOpen" x-transition style="padding: 15px; background: #0f172a; border-top: 1px solid #374151; display: flex; flex-direction: column; gap: 12px;">
-                                <button class="btn-top-generator-modern" @click="window.spustGeneratorTopZapasu()">
-                                    🔥 GENERÁTOR TOP ZÁPASŮ KOLA
-                                </button>
-                                <div style="background: #111827; border: 1px solid #374151; padding: 10px 14px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; box-sizing: border-box; width: 100%;">
-                                    <span style="color: #e5e7eb; font-size: 0.82rem; font-weight: bold;">⚡ Automatický generátor TOP zápasů:</span>
-                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
-                                        <input type="checkbox"
-                                               :checked="$store.appState.adminLeagueHasTopMatch !== false"
-                                               @change="window.toggleLeagueTopGenerator($store.appState.selectedAdminLeague, $event.target.checked)"
-                                               style="width: 18px; height: 18px; cursor: pointer; accent-color: #ea580c; margin: 0;">
-                                        <span style="font-size: 0.8rem; font-weight: bold; font-family: 'Oswald', sans-serif;"
-                                              :style="$store.appState.adminLeagueHasTopMatch !== false ? 'color: #ea580c;' : 'color: #6b7280;'"
-                                              x-text="$store.appState.adminLeagueHasTopMatch !== false ? 'POVOLEN' : 'VYPNUT'"></span>
-                                    </label>
-                                </div>
-                                <template x-if="$store.appState.selectedAdminLeague === 'Chance Liga' || $store.appState.selectedAdminLeague === 'Premier League'">
-                                    <div class="bonus-collapse-box" style="margin-top: 4px;" x-data="{ openSim: false }">
-                                        <button class="bonus-collapse-trigger" @click="openSim = !openSim" style="color: #fbbf24; border-color: #d97706; font-weight: bold; background: #1f2937;">
-                                            <span>🧪 TESTOVACÍ SIMULÁTOR POHÁRU</span>
-                                            <span x-text="openSim ? '▲' : '▼'"></span>
-                                        </button>
-                                        <div class="bonus-collapse-content" x-show="openSim" x-transition style="padding: 15px; background: #111827; border-top: 1px solid #374151;">
-                                            <p style="color: #9ca3af; font-size: 0.78rem; margin: 0 0 12px 0; line-height: 1.4; text-align: left;">
-                                                Umožňuje okamžitě otestovat vzhled a chování Poháru pro zamknuté skupiny (včetně tabulky 2. míst) nebo K.O. Pavouka bez čekání na server.
-                                            </p>
-                                            <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
-                                                <button class="action-btn" style="width: 100%; min-height: 38px; height: auto; padding: 6px 12px; font-size: 0.8rem; background: #059669; border: 1px solid #10b981; border-radius: 6px; margin: 0; font-family: 'Oswald', sans-serif; letter-spacing: 0.3px; display: flex; align-items: center; justify-content: center; cursor: pointer;" @click="window.adminSimulateCupLock($store.appState.selectedAdminLeague)">
-                                                    <span x-text="$store.appState.selectedAdminLeague === 'Premier League' ? '🔒 ZAMKNOUT SKUPINY (9. KOLO)' : '🔒 ZAMKNOUT SKUPINY (11. KOLO)'"></span>
-                                                </button>
-                                                <button class="action-btn" style="width: 100%; min-height: 38px; height: auto; padding: 6px 12px; font-size: 0.8rem; background: #ea580c; border: 1px solid #f97316; border-radius: 6px; margin: 0; font-family: 'Oswald', sans-serif; letter-spacing: 0.3px; display: flex; align-items: center; justify-content: center; cursor: pointer;" @click="window.adminSimulateCupPlayoff($store.appState.selectedAdminLeague)">
-                                                    <span x-text="$store.appState.selectedAdminLeague === 'Premier League' ? '🌳 SPUSTIT K.O. PLAY-OFF (19. KOLO)' : '🌳 SPUSTIT K.O. PLAY-OFF (18. KOLO)'"></span>
-                                                </button>
-                                                <button class="action-btn" style="width: 100%; min-height: 38px; height: auto; padding: 6px 12px; font-size: 0.8rem; background: #374151; border: 1px solid #4b5563; border-radius: 6px; margin: 0; font-family: 'Oswald', sans-serif; letter-spacing: 0.3px; display: flex; align-items: center; justify-content: center; cursor: pointer;" @click="window.adminResetCupState($store.appState.selectedAdminLeague)">
-                                                    🔄 RESETOVAT DO ŽIVÉHO NÁHLEDU
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </template>
-
-                                <div class="bonus-collapse-box" style="margin-top: 4px;">
-                                    <button class="bonus-collapse-trigger" @click="$store.appState.adminAddOpen = !$store.appState.adminAddOpen" style="color: #10b981; border-color: #059669; font-weight: bold; background: #1f2937;">
-                                        <span>➕ PŘIDÁNÍ NOVÉHO ZÁPASU</span>
-                                        <span x-text="$store.appState.adminAddOpen ? '▲' : '▼'"></span>
-                                    </button>
-                                    <div class="bonus-collapse-content" x-show="$store.appState.adminAddOpen" x-transition style="padding: 15px; background: #111827; border-top: 1px solid #374151;">
-                                        <div style="display: flex; flex-direction: column; gap: 10px; text-align: left;">
-                                            <div><label class="bonus-input-label">Domácí tým:</label><input type="text" id="admin-new-domaci" placeholder="Např. Sparta" class="bonus-text-input"></div>
-                                            <div><label class="bonus-input-label">Hostující tým:</label><input type="text" id="admin-new-hoste" placeholder="Např. Slavia" class="bonus-text-input"></div>
-                                            <div><label class="bonus-input-label">Datum a čas zápasu:</label><input type="datetime-local" id="admin-new-datum" class="bonus-text-input" style="color-scheme: dark;"></div>
-                                            <div style="display: flex; gap: 15px; margin-top: 5px;">
-                                                <label style="color: #fff; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                                                    <input type="checkbox" id="admin-new-isPlayoff"> 🏆 Play-off
-                                                </label>
-                                                <label style="color: #fff; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                                                    <input type="checkbox" id="admin-new-isTopMatch"> 🔥 TOP Zápas
-                                                </label>
-                                            </div>
-                                            <button class="action-btn" @click="window.adminCreateMatch($store.appState.selectedAdminLeague)" style="background: #059669; color: white; width: 100%; font-weight: bold; margin-top: 10px;">
-                                                ➕ ZALOŽIT ZÁPAS
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="bonus-collapse-box">
-                                    <button class="bonus-collapse-trigger" @click="$store.appState.adminGlobalOpen = !$store.appState.adminGlobalOpen" style="color: #fbbf24; border-color: #d97706; font-weight: bold; background: #1f2937;">
-                                        <span>🏆 GLOBÁLNÍ VYHODNOCENÍ TURNAJE</span>
-                                        <span x-text="$store.appState.adminGlobalOpen ? '▲' : '▼'"></span>
-                                    </button>
-                                    <div class="bonus-collapse-content" x-show="$store.appState.adminGlobalOpen" x-transition style="padding: 15px; background: #111827; border-top: 1px solid #374151;">
-                                        <div style="display: flex; flex-direction: column; gap: 10px; text-align: left;">
-                                            <div>
-                                                <label class="bonus-input-label">Oficiální celkový vítěz:</label>
-                                                <input type="text" id="admin-liga-vitez" x-model="$store.appState.adminGlobalVitez" placeholder="Reálný mistr" class="bonus-text-input">
-                                            </div>
-                                            <div>
-                                                <label class="bonus-input-label">Oficiální nejlepší střelec:</label>
-                                                <input type="text" id="admin-liga-strelec" x-model="$store.appState.adminGlobalStrelec" placeholder="Nejlepší střelec" class="bonus-text-input">
-                                            </div>
-                                            <button class="action-btn" @click="window.saveLeagueGlobalResults($store.appState.selectedAdminLeague)" style="background: #d97706; color: white; width: 100%; font-weight: bold; margin-top: 10px;">
-                                                ⚙️ ULOŽIT VÝSLEDKY TURNAJE
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="carousel-container" style="margin-top: 15px; margin-bottom: 15px;" x-data="{ open: false }" @click.away="open = false" x-cloak>
-                            <button class="nav-btn-leaderboard carousel-btn" onclick="window.posunKoloAdmin(-1)">◀</button>
-                            <div class="custom-dropdown-wrapper">
-                                <div class="custom-dropdown-trigger" @click="open = !open">
-                                    <span x-text="$store.appState.unikatniKolaAdminu[$store.appState.adminKolaIndex] || 'Vyber kolo'"></span>
-                                    <span class="custom-dropdown-arrow">▼</span>
-                                </div>
-                                <div class="custom-dropdown-menu" x-show="open" x-transition>
-                                    <template x-for="(kolo, index) in $store.appState.unikatniKolaAdminu" :key="index">
-                                        <div class="custom-dropdown-item" 
-                                             :class="{ 'is-active': index === $store.appState.adminKolaIndex }"
-                                             @click="$store.appState.adminKolaIndex = index; open = false;" 
-                                             x-text="kolo"></div>
-                                    </template>
-                                </div>
-                            </div>
-                            <button class="nav-btn-leaderboard carousel-btn" onclick="window.posunKoloAdmin(1)">▶</button>
-                        </div>
-
-                        <div class="zebra-container" id="adminMatchesContainer">
-                            <div class="db-empty-msg" x-show="!$store.appState.adminMatchesLoaded">Načítám ligu... ⏳</div>
-                            <div class="db-empty-msg" x-show="$store.appState.adminMatchesLoaded && $store.appState.dynamickyFeedAdminZapasu.length === 0">V tomto kole nejsou žádné zápasy.</div>
-                            
-                            <template x-for="(match, idx) in $store.appState.dynamickyFeedAdminZapasu" :key="match.id">
-                                <div class="zebra-block tip-row" :class="[match.vysledek_domaci !== undefined ? 'has-tip match-is-evaluated' : '', idx % 2 === 0 ? 'zebra-odd' : 'zebra-even']">
-                                    <div class="match-info">
-                                        <span class="match-date">
-                                            📅 <span x-text="new Date(match.datum?.seconds ? match.datum.seconds * 1000 : match.datum).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })"></span>
-                                            <template x-if="match.vysledek_domaci !== undefined">
-                                                <span style="color: #34d399; font-weight: bold; margin-left: 4px; font-size: 0.85rem;" title="Vyhodnoceno">✓</span>
-                                            </template>
-                                            <template x-if="match.vysledek_domaci === undefined && (match.apiStatus === 'IN_PLAY' || match.apiStatus === 'PAUSED')">
-                                                <span class="match-top-badge" style="margin-left: 4px;">🔴 LIVE</span>
-                                            </template>
-                                            <template x-if="match.vysledek_domaci === undefined && match.apiStatus !== 'IN_PLAY' && match.apiStatus !== 'PAUSED'">
-                                                <span class="match-metadata-lock" style="font-size: 0.75rem; margin-left: 4px;">🔒</span>
-                                            </template>
-                                            <span style="cursor: pointer; user-select: none; margin-left: 4px; color: #38bdf8; font-size: 0.85rem;" @click="match.showEdit = !match.showEdit">⚙️</span>
-                                            <template x-if="match.isTopMatch">
-                                                <span class="match-top-badge" @click="window.toggleTopMatch(match.id)" style="margin-left: 4px; cursor: pointer;" title="Kliknutím odebereš TOP">🔥 TOP</span>
-                                            </template>
-                                            <template x-if="!match.isTopMatch">
-                                                <button @click="window.toggleTopMatch(match.id)" 
-                                                        style="margin-left: 4px; padding: 0 4px; border-radius: 4px; font-size: 0.7rem; background: transparent; color: #6b7280; border: 1px solid #374151; cursor: pointer; transition: all 0.2s;"
-                                                        title="Označit jako TOP">
-                                                    🔥
-                                                </button>
-                                            </template>
-                                        </span>
-                                        <div class="match-teams" :style="'font-size: ' + window.vypocitejOptimalniPismo(match.domaci, match.hoste)"><span x-text="match.domaci"></span> – <span x-text="match.hoste"></span></div>
-                                    </div>
-
-                                    <div class="action-inputs">
-                                        <div class="user-tip-box admin-result-box">
-                                            <div class="user-tip-label result-label-color">Výsledek</div>
-                                            <template x-if="match.vysledek_domaci !== undefined">
-                                                <span class="user-tip-value result-value-color" x-html="window.formatujZobrazeneSkore(match.vysledek_domaci, match.vysledek_hoste, match.postup, $store.appState.selectedAdminLeague, match.isPlayoff, true)"></span>
-                                            </template>
-                                            <template x-if="match.vysledek_domaci === undefined">
-                                                <span class="user-tip-value no-tip">?:?</span>
-                                            </template>
-                                        </div>
-
-                                        <div class="match-input-selectors-group middle-slot-box">
-                                            <select :id="'admin-res-domaci-' + match.id" class="select-score" @change="window.handleAdminScoreChange(match.id, match.isPlayoff || false)">
-                                                <option value="">?</option>
-                                                <template x-for="i in Array.from({length: 21}, (_, i) => i)" :key="i">
-                                                    <option :value="String(i)" :selected="parseInt(match.vysledek_domaci) === i" x-text="i"></option>
-                                                </template>
-                                            </select>
-                                            <span class="select-divider">:</span>
-                                            <select :id="'admin-res-hoste-' + match.id" class="select-score" @change="window.handleAdminScoreChange(match.id, match.isPlayoff || false)">
-                                                <option value="">?</option>
-                                                <template x-for="i in Array.from({length: 21}, (_, i) => i)" :key="i">
-                                                    <option :value="String(i)" :selected="parseInt(match.vysledek_hoste) === i" x-text="i"></option>
-                                                </template>
-                                            </select>
-                                        </div>
-                                        <button class="btn-tip" @click="window.saveRealResult(match.id)" x-text="match.vysledek_domaci !== undefined ? 'ZMĚŇ' : 'ULOŽ'"></button>
-                                    </div>
-
-                                    <!-- Volba postupu v Play-off nebo vítěze v prodloužení pro Extraligu v administraci -->
-                                    <div :id="'playoff-admin-box-' + match.id" 
-                                         class="playoff-result-box" 
-                                         :style="(match.isPlayoff || $store.appState.selectedAdminLeague === 'Tipsport Extraliga') && match.vysledek_domaci !== undefined && match.vysledek_hoste !== undefined && parseInt(match.vysledek_domaci) === parseInt(match.vysledek_hoste) ? 'display: flex;' : 'display: none;'"
-                                         x-cloak>
-                                        <div class="playoff-interactive-selector">
-                                            <span class="playoff-selector-label" x-text="$store.appState.selectedAdminLeague === 'Tipsport Extraliga' ? 'Vítěz zápasu do rozhodnutí:' : 'Postupující tým při remíze:'"></span>
-                                            <div class="playoff-buttons-wrapper">
-                                                <button type="button" 
-                                                        :id="'playoff-admin-dom-' + match.id"
-                                                        class="playoff-tile-btn"
-                                                        :class="{ 'is-active-tip': match.postup === 'domaci' }"
-                                                        @click="window.selectPlayoffAdmin(match.id, 'domaci')">
-                                                    👉 <span x-text="match.domaci"></span>
-                                                    <span class="playoff-tip-badge" x-show="match.postup === 'domaci'">VÍTĚZ</span>
-                                                </button>
-                                                <button type="button" 
-                                                        :id="'playoff-admin-hos-' + match.id"
-                                                        class="playoff-tile-btn"
-                                                        :class="{ 'is-active-tip': match.postup === 'hoste' }"
-                                                        @click="window.selectPlayoffAdmin(match.id, 'hoste')">
-                                                    <span x-text="match.hoste"></span> 👈
-                                                    <span class="playoff-tip-badge" x-show="match.postup === 'hoste'">VÍTĚZ</span>
-                                                </button>
-                                            </div>
-                                            <input type="hidden" :id="'playoff-admin-val-' + match.id" :value="match.postup || ''">
-                                        </div>
-                                    </div>
-
-                                    <!-- Samostatný šuplík nastavení na novém řádku karty -->
-                                    <div x-show="match.showEdit" style="width: 100%; flex-basis: 100%; background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #374151; margin-top: 8px; box-sizing: border-box; flex-shrink: 0;" x-transition x-cloak>
-                                        <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
-                                            <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
-                                                <label class="bonus-input-label" style="text-align: left; font-size: 0.72rem; color: #9ca3af; font-weight: bold; letter-spacing:0.3px;">📅 UPRAVIT DATUM A ČAS ZÁPASU:</label>
-                                                <input type="datetime-local" :id="'admin-edit-datum-' + match.id" :value="(() => { const d = new Date(match.datum?.seconds ? match.datum.seconds * 1000 : match.datum); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; })()" class="bonus-text-input" style="color-scheme: dark; height: 40px; padding: 6px 10px; margin: 0; width: 100%; box-sizing: border-box; text-align: left; font-size:0.9rem;">
-                                                <button class="action-btn" style="height: 36px; margin-top: 4px; padding: 0; background: #2563eb; font-size: 0.8rem; font-family: 'Oswald', sans-serif; width:100%; border-radius:8px;" @click="window.updateMatchDate(match.id)">ULOŽIT NOVÝ ČAS</button>
-                                            </div>
-                                            <!-- 📊 RUČNÍ ZADÁNÍ KURZŮ (1 - X - 2) -->
-                                            <div style="border-top: 1px dashed #374151; padding-top: 10px; display: flex; flex-direction: column; gap: 6px; width: 100%;">
-                                                <label class="bonus-input-label" style="text-align: left; font-size: 0.72rem; color: #fbbf24; font-weight: bold; letter-spacing:0.3px;">📊 RUČNÍ ZADÁNÍ KURZŮ (1 - X - 2):</label>
-                                                <div style="display: flex; gap: 8px; width: 100%;">
-                                                    <div style="flex: 1;">
-                                                        <span style="font-size: 0.68rem; color: #9ca3af; display: block; margin-bottom: 2px;">1 (Domácí)</span>
-                                                        <input type="number" step="0.01" min="1.01" :id="'admin-edit-odd-1-' + match.id" :value="match.odds?.['1'] || ''" placeholder="1.85" class="bonus-text-input" style="height: 34px; padding: 4px 6px; text-align: center; font-weight: bold; font-size: 0.85rem; width: 100%; box-sizing: border-box;">
-                                                    </div>
-                                                    <div style="flex: 1;">
-                                                        <span style="font-size: 0.68rem; color: #9ca3af; display: block; margin-bottom: 2px;">X (Remíza)</span>
-                                                        <input type="number" step="0.01" min="1.01" :id="'admin-edit-odd-X-' + match.id" :value="match.odds?.['X'] || ''" placeholder="3.40" class="bonus-text-input" style="height: 34px; padding: 4px 6px; text-align: center; font-weight: bold; font-size: 0.85rem; width: 100%; box-sizing: border-box;">
-                                                    </div>
-                                                    <div style="flex: 1;">
-                                                        <span style="font-size: 0.68rem; color: #9ca3af; display: block; margin-bottom: 2px;">2 (Hosté)</span>
-                                                        <input type="number" step="0.01" min="1.01" :id="'admin-edit-odd-2-' + match.id" :value="match.odds?.['2'] || ''" placeholder="4.20" class="bonus-text-input" style="height: 34px; padding: 4px 6px; text-align: center; font-weight: bold; font-size: 0.85rem; width: 100%; box-sizing: border-box;">
-                                                    </div>
-                                                </div>
-                                                <div style="display: flex; gap: 8px; margin-top: 4px; width: 100%;">
-                                                    <button class="action-btn" style="height: 34px; margin: 0; padding: 0; background: #059669; font-size: 0.8rem; font-family: 'Oswald', sans-serif; flex: 1; border-radius: 8px;" @click="window.saveMatchOdds(match.id)">💾 ULOŽIT KURZY</button>
-                                                    <button class="action-btn" style="height: 34px; margin: 0; padding: 0; background: #dc2626; font-size: 0.8rem; font-family: 'Oswald', sans-serif; flex: 1; border-radius: 8px;" @click="window.deleteMatchOdds(match.id)">🗑️ SMAZAT KURZ</button>
-                                                </div>
-                                            </div>
-                                            <!-- ⏳ OZNAČENÍ / VRÁCENÍ ODLOŽENÉHO ZÁPASU -->
-                                            <div style="border-top: 1px dashed #374151; padding-top: 10px; display: flex; flex-direction: column; gap: 6px; width: 100%;">
-                                                <label class="bonus-input-label" style="text-align: left; font-size: 0.72rem; color: #fbbf24; font-weight: bold; letter-spacing: 0.3px;">⏳ STAV ZÁPASU (ODLOŽENÍ):</label>
-                                                <button type="button" class="action-btn" 
-                                                        :style="match.apiStatus === 'POSTPONED' ? 'height: 36px; margin: 0; padding: 0; background: #059669; border: 1px solid #10b981; font-size: 0.8rem; font-family: \'Oswald\', sans-serif; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; color: #ffffff;' : 'height: 36px; margin: 0; padding: 0; background: #d97706; border: 1px solid #f59e0b; font-size: 0.8rem; font-family: \'Oswald\', sans-serif; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; color: #ffffff;'" 
-                                                        @click="window.toggleMatchPostponed(match.id, match.apiStatus !== 'POSTPONED')">
-                                                    <span x-text="match.apiStatus === 'POSTPONED' ? '▶️ VRÁTIT ZÁPAS JAKO AKTIVNÍ' : '⏳ OZNAČIT ZÁPAS JAKO ODLOŽENÝ'"></span>
-                                                </button>
-                                            </div>
-                                            <div style="border-top: 1px dashed #374151; padding-top: 10px; display: flex; flex-direction: column; gap: 4px; text-align: center; width: 100%;">
-                                                <span style="color: #ef4444; font-size: 0.72rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">⚠️ DANGER ZONE / NEZVRATNÁ AKCE</span>
-                                                <button class="action-btn" style="height: 36px; margin-top: 6px; padding: 0; background: #dc2626; font-size: 0.8rem; font-family: 'Oswald', sans-serif; width:100%; border-radius:8px;" @click="window.deleteMatch(match.id)">🗑️ SMAZAT ZÁPAS Z SYSTÉMU</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
                 </div>
 
                 <div x-show="$store.appState.adminActiveTab === 'users'">
@@ -1122,14 +834,14 @@
                         <div class="db-empty-msg" x-show="!$store.appState.adminUsersLoaded">Načítám soupisku dravých tipérů... ⏳</div>
                         <div class="db-empty-msg" x-show="$store.appState.adminUsersLoaded && $store.appState.adminUsers.length === 0">Na soupisce nejsou žádní hráči.</div>
 
-                        <template x-for="(userItem, idx) in $store.appState.adminUsers" :key="userItem.id">
+                        <template x-for="(userItem, idx) in $store.appState.filteredAdminUsers" :key="userItem.id">
                             <div class="leaderboard-row-wrapper" style="width: 100%;" :class="{ 'is-waiting-room': !userItem.leagues || userItem.leagues.length === 0 }">
                                 <div @click="$store.appState.adminOpenedUserId = ($store.appState.adminOpenedUserId === userItem.id ? null : userItem.id)" class="leaderboard-row-trigger" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; border-radius: 8px;">
                                     <div class="leaderboard-row-left">
                                         <span class="leaderboard-row-nickname" style="font-weight: bold; font-family: 'Oswald', sans-serif; letter-spacing:0.3px;" x-text="userItem.nickname || 'Nový Hráč'"></span>
                                     </div>
                                     <div class="leaderboard-row-right" style="display: flex; align-items: center; gap: 4px;">
-                                        <template x-if="userItem.isAdmin">
+                                        <template x-if="$store.appState.isUserAdminInContext(userItem)">
                                             <span style="color:#ef4444; font-size:0.68rem; font-weight:bold; background:rgba(239,68,68,0.15); padding:2px 6px; border-radius:4px; border:1px solid rgba(239,68,68,0.3); margin-right: 4px;">ADMIN</span>
                                         </template>
                                         <template x-if="!userItem.leagues || userItem.leagues.length === 0">
@@ -1142,15 +854,9 @@
                                     </div>
                                 </div>
                                 <div class="leaderboard-row-dropdown" x-show="$store.appState.adminOpenedUserId === userItem.id" x-transition style="background: #0f172a; border: 1px solid #374151; border-top: none; padding: 12px 15px; border-radius: 0 0 8px 8px; margin-top: -4px; display: flex; flex-direction: column; gap: 10px; text-align: left;">
-                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 0.85rem; color: #e5e7eb;"><input type="checkbox" :checked="(userItem.leagues || []).includes('MS v hokeji')" @change="window.toggleUserLeague(userItem.id, 'MS v hokeji', $event.target.checked)" style="width: 16px; height: 16px; cursor: pointer; accent-color: #10b981; margin: 0;"> 🏒 MS V HOKEJI</label>
-                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 0.85rem; color: #e5e7eb;"><input type="checkbox" :checked="(userItem.leagues || []).includes('MS ve fotbale')" @change="window.toggleUserLeague(userItem.id, 'MS ve fotbale', $event.target.checked)" style="width: 16px; height: 16px; cursor: pointer; accent-color: #10b981; margin: 0;"> ⚽ MS VE FOTBALE</label>
-                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 0.85rem; color: #e5e7eb;"><input type="checkbox" :checked="(userItem.leagues || []).includes('Tipsport Extraliga')" @change="window.toggleUserLeague(userItem.id, 'Tipsport Extraliga', $event.target.checked)" style="width: 16px; height: 16px; cursor: pointer; accent-color: #10b981; margin: 0;"> 🏒 TIPSPORT EXTRALIGA</label>
-                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 0.85rem; color: #e5e7eb;"><input type="checkbox" :checked="(userItem.leagues || []).includes('Chance Liga')" @change="window.toggleUserLeague(userItem.id, 'Chance Liga', $event.target.checked)" style="width: 16px; height: 16px; cursor: pointer; accent-color: #10b981; margin: 0;"> ⚽ CHANCE LIGA</label>
-                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 0.85rem; color: #e5e7eb;"><input type="checkbox" :checked="(userItem.leagues || []).includes('Premier League')" @change="window.toggleUserLeague(userItem.id, 'Premier League', $event.target.checked)" style="width: 16px; height: 16px; cursor: pointer; accent-color: #10b981; margin: 0;"> ⚽ PREMIER LEAGUE</label>
-                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 0.85rem; color: #e5e7eb;"><input type="checkbox" :checked="(userItem.leagues || []).includes('Liga mistrů')" @change="window.toggleUserLeague(userItem.id, 'Liga mistrů', $event.target.checked)" style="width: 16px; height: 16px; cursor: pointer; accent-color: #10b981; margin: 0;"> ⚽ LIGA MISTRŮ</label>
-                                    <div x-show="!userItem.isAdmin" style="border-top: 1px dashed #374151; padding-top: 10px; margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
+                                    <div x-show="$store.appState.canProxyUser(userItem)" style="display: flex; justify-content: space-between; align-items: center;">
                                         <span style="color: #e5e7eb; font-size: 0.85rem; font-weight: bold;">🎭 Správa tipů (Zpětný zápis):</span>
-                                        <button class="btn-tip" style="height: 32px; width: auto; padding: 0 12px; background: #ea580c; border: 1px solid #f97316; font-size: 0.72rem; font-weight:bold; font-family:'Oswald',sans-serif;" @click="window.openLoutkovodicModal(userItem.id)">🎭 LOUTKOVODIČ</button>
+                                        <button class="btn-tip" style="height: 34px; width: auto; padding: 0 14px; background: #ea580c; border: 1px solid #f97316; font-size: 0.75rem; font-weight: bold; font-family: 'Oswald', sans-serif;" @click="window.openLoutkovodicModal(userItem.id)">🎭 LOUTKOVODIČ</button>
                                     </div>
                                 </div>
                             </div>
@@ -1170,6 +876,277 @@
         <div class="app-container app-container-padding">
             <h2 class="screen-main-title" style="margin-bottom: 20px;">👑 Vládní Kokpit</h2>
             <div id="superAdminContainer"></div>
+            <!-- ⚽ SPRÁVA ZÁPASŮ PRO SUPER ADMINA -->
+            <div x-show="($store.appState?.superAdminActiveTab || 'users') === 'matches'" style="width: 100%; margin-top: 10px;">
+                <div x-show="!$store.appState.selectedAdminLeague">
+                    <h2 style="font-family: 'Oswald', sans-serif; text-transform: uppercase; margin-top: 10px; margin-bottom: 14px; color: #fff; font-size: 1.1rem; text-align: left; letter-spacing: 0.5px;">Vyber soutěž k administraci zápasů:</h2>
+                    <div class="katalog-list-container">
+                        <template x-for="liga in ['Chance Liga', 'Premier League', 'Liga mistrů', 'Tipsport Extraliga', 'MS v hokeji', 'MS ve fotbale']" :key="liga">
+                            <button class="katalog-card-btn" 
+                                    :class="{
+                                        'card-pl': liga.toLowerCase().includes('premier'),
+                                        'card-chance': liga.toLowerCase().includes('chance'),
+                                        'card-ucl': liga.toLowerCase().includes('mistr') || liga.toLowerCase().includes('ucl'),
+                                        'card-extraliga': liga.toLowerCase().includes('extraliga'),
+                                        'card-hockey-wc': liga.toLowerCase().includes('hokeji'),
+                                        'card-national': liga.toLowerCase().includes('národů'),
+                                        'card-wc': liga.toLowerCase().includes('ms ve fotbale')
+                                    }"
+                                    @click="window.selectAdminLeague(liga)">
+                                <div class="katalog-card-left">
+                                    <div class="katalog-card-logo-wrapper">
+                                        <img :src="window.getLeagueLogo(liga)" class="katalog-card-logo" alt="Logo" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='img/favicon192.png';">
+                                    </div>
+                                    <div class="katalog-card-info">
+                                        <span class="katalog-card-badge" x-text="window.getLeagueBadge(liga)"></span>
+                                        <div class="katalog-card-title" x-text="liga.toUpperCase()"></div>
+                                    </div>
+                                </div>
+                                <div class="katalog-card-right">
+                                    <span class="katalog-card-sub" x-text="$store.appState.getLeagueSubtext(liga)"></span>
+                                    <span class="katalog-card-arrow">➔</span>
+                                </div>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+
+                <div x-show="$store.appState.selectedAdminLeague">
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                        <button class="nav-btn" @click="window.selectAdminLeague(null)" style="background:#4b5563; width:auto; padding:6px 14px; text-transform:uppercase; margin:0;">⬅ Výběr soutěže</button>
+                    </div>
+                    <h2 style="text-align: center; font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 1.25rem; color: #ffffff; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 15px 0; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap;">
+                        <span>⚙️ SPRÁVA ZÁPASŮ:</span>
+                        <span style="color: #fbbf24;" x-text="$store.appState.selectedAdminLeague?.toUpperCase()"></span>
+                    </h2>
+
+                    <div class="bonus-collapse-box" style="margin-bottom: 20px; border-color: #374151;">
+                        <button class="bonus-collapse-trigger" @click="$store.appState.adminMasterOpen = !$store.appState.adminMasterOpen" style="color: #60a5fa; border-color: #2563eb; font-weight: bold; background: #1f2937;">
+                            <span>⚙️ MOŽNOSTI SPRÁVY A NÁSTROJE LIGY</span>
+                            <span x-text="$store.appState.adminMasterOpen ? '▲' : '▼'"></span>
+                        </button>
+                        <div class="bonus-collapse-content" x-show="$store.appState.adminMasterOpen" x-transition style="padding: 15px; background: #0f172a; border-top: 1px solid #374151; display: flex; flex-direction: column; gap: 12px;">
+                            <button class="btn-top-generator-modern" @click="window.spustGeneratorTopZapasu()">
+                                🔥 GENERÁTOR TOP ZÁPASŮ KOLA
+                            </button>
+                            <div style="background: #111827; border: 1px solid #374151; padding: 10px 14px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; box-sizing: border-box; width: 100%;">
+                                <span style="color: #e5e7eb; font-size: 0.82rem; font-weight: bold;">⚡ Automatický generátor TOP zápasů:</span>
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+                                    <input type="checkbox"
+                                           :checked="$store.appState.adminLeagueHasTopMatch !== false"
+                                           @change="window.toggleLeagueTopGenerator($store.appState.selectedAdminLeague, $event.target.checked)"
+                                           style="width: 18px; height: 18px; cursor: pointer; accent-color: #ea580c; margin: 0;">
+                                    <span style="font-size: 0.8rem; font-weight: bold; font-family: 'Oswald', sans-serif;"
+                                          :style="$store.appState.adminLeagueHasTopMatch !== false ? 'color: #ea580c;' : 'color: #6b7280;'"
+                                          x-text="$store.appState.adminLeagueHasTopMatch !== false ? 'POVOLEN' : 'VYPNUT'"></span>
+                                </label>
+                            </div>
+
+                            <div class="bonus-collapse-box" style="margin-top: 4px;">
+                                <button class="bonus-collapse-trigger" @click="$store.appState.adminAddOpen = !$store.appState.adminAddOpen" style="color: #10b981; border-color: #059669; font-weight: bold; background: #1f2937;">
+                                    <span>➕ PŘIDÁNÍ NOVÉHO ZÁPASU</span>
+                                    <span x-text="$store.appState.adminAddOpen ? '▲' : '▼'"></span>
+                                </button>
+                                <div class="bonus-collapse-content" x-show="$store.appState.adminAddOpen" x-transition style="padding: 15px; background: #111827; border-top: 1px solid #374151;">
+                                    <div style="display: flex; flex-direction: column; gap: 10px; text-align: left;">
+                                        <div><label class="bonus-input-label">Domácí tým:</label><input type="text" id="admin-new-domaci" placeholder="Např. Sparta" class="bonus-text-input"></div>
+                                        <div><label class="bonus-input-label">Hostující tým:</label><input type="text" id="admin-new-hoste" placeholder="Např. Slavia" class="bonus-text-input"></div>
+                                        <div><label class="bonus-input-label">Datum a čas zápasu:</label><input type="datetime-local" id="admin-new-datum" class="bonus-text-input" style="color-scheme: dark;"></div>
+                                        <div style="display: flex; gap: 15px; margin-top: 5px;">
+                                            <label style="color: #fff; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                                <input type="checkbox" id="admin-new-isPlayoff"> 🏆 Play-off
+                                            </label>
+                                            <label style="color: #fff; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                                <input type="checkbox" id="admin-new-isTopMatch"> 🔥 TOP Zápas
+                                            </label>
+                                        </div>
+                                        <button class="action-btn" @click="window.adminCreateMatch($store.appState.selectedAdminLeague)" style="background: #059669; color: white; width: 100%; font-weight: bold; margin-top: 10px;">
+                                            ➕ ZALOŽIT ZÁPAS
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bonus-collapse-box">
+                                <button class="bonus-collapse-trigger" @click="$store.appState.adminGlobalOpen = !$store.appState.adminGlobalOpen" style="color: #fbbf24; border-color: #d97706; font-weight: bold; background: #1f2937;">
+                                    <span>🏆 GLOBÁLNÍ VYHODNOCENÍ TURNAJE</span>
+                                    <span x-text="$store.appState.adminGlobalOpen ? '▲' : '▼'"></span>
+                                </button>
+                                <div class="bonus-collapse-content" x-show="$store.appState.adminGlobalOpen" x-transition style="padding: 15px; background: #111827; border-top: 1px solid #374151;">
+                                    <div style="display: flex; flex-direction: column; gap: 10px; text-align: left;">
+                                        <div>
+                                            <label class="bonus-input-label">Oficiální celkový vítěz:</label>
+                                            <input type="text" id="admin-liga-vitez" x-model="$store.appState.adminGlobalVitez" placeholder="Reálný mistr" class="bonus-text-input">
+                                        </div>
+                                        <div>
+                                            <label class="bonus-input-label">Oficiální nejlepší střelec:</label>
+                                            <input type="text" id="admin-liga-strelec" x-model="$store.appState.adminGlobalStrelec" placeholder="Nejlepší střelec" class="bonus-text-input">
+                                        </div>
+                                        <button class="action-btn" @click="window.saveLeagueGlobalResults($store.appState.selectedAdminLeague)" style="background: #d97706; color: white; width: 100%; font-weight: bold; margin-top: 10px;">
+                                            ⚙️ ULOŽIT VÝSLEDKY TURNAJE
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="carousel-container" style="margin-top: 15px; margin-bottom: 15px;" x-data="{ open: false }" @click.away="open = false" x-cloak>
+                        <button class="nav-btn-leaderboard carousel-btn" onclick="window.posunKoloAdmin(-1)">◀</button>
+                        <div class="custom-dropdown-wrapper">
+                            <div class="custom-dropdown-trigger" @click="open = !open">
+                                <span x-text="$store.appState.unikatniKolaAdminu[$store.appState.adminKolaIndex] || 'Vyber kolo'"></span>
+                                <span class="custom-dropdown-arrow">▼</span>
+                            </div>
+                            <div class="custom-dropdown-menu" x-show="open" x-transition>
+                                <template x-for="(kolo, index) in $store.appState.unikatniKolaAdminu" :key="index">
+                                    <div class="custom-dropdown-item" 
+                                         :class="{ 'is-active': index === $store.appState.adminKolaIndex }"
+                                         @click="$store.appState.adminKolaIndex = index; open = false;" 
+                                         x-text="kolo"></div>
+                                </template>
+                            </div>
+                        </div>
+                        <button class="nav-btn-leaderboard carousel-btn" onclick="window.posunKoloAdmin(1)">▶</button>
+                    </div>
+
+                    <div class="zebra-container" id="adminMatchesContainer">
+                        <div class="db-empty-msg" x-show="!$store.appState.adminMatchesLoaded">Načítám ligu... ⏳</div>
+                        <div class="db-empty-msg" x-show="$store.appState.adminMatchesLoaded &&$store.appState.dynamickyFeedAdminZapasu.length === 0">V tomto kole nejsou žádné zápasy.</div>
+                        
+                        <template x-for="(match, idx) in $store.appState.dynamickyFeedAdminZapasu" :key="match.id">
+                            <div class="zebra-block tip-row" :class="[match.vysledek_domaci !== undefined ? 'has-tip match-is-evaluated' : '', idx % 2 === 0 ? 'zebra-odd' : 'zebra-even']">
+                                <div class="match-info">
+                                    <span class="match-date">
+                                        📅 <span x-text="new Date(match.datum?.seconds ? match.datum.seconds * 1000 : match.datum).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })"></span>
+                                        <template x-if="match.vysledek_domaci !== undefined">
+                                            <span style="color: #34d399; font-weight: bold; margin-left: 4px; font-size: 0.85rem;" title="Vyhodnoceno">✓</span>
+                                        </template>
+                                        <template x-if="match.vysledek_domaci === undefined && (match.apiStatus === 'IN_PLAY' || match.apiStatus === 'PAUSED')">
+                                            <span class="match-top-badge" style="margin-left: 4px;">🔴 LIVE</span>
+                                        </template>
+                                        <template x-if="match.vysledek_domaci === undefined && match.apiStatus !== 'IN_PLAY' && match.apiStatus !== 'PAUSED'">
+                                            <span class="match-metadata-lock" style="font-size: 0.75rem; margin-left: 4px;">🔒</span>
+                                        </template>
+                                        <span style="cursor: pointer; user-select: none; margin-left: 4px; color: #38bdf8; font-size: 0.85rem;" @click="match.showEdit = !match.showEdit">⚙️</span>
+                                        <template x-if="match.isTopMatch">
+                                            <span class="match-top-badge" @click="window.toggleTopMatch(match.id)" style="margin-left: 4px; cursor: pointer;" title="Kliknutím odebereš TOP">🔥 TOP</span>
+                                        </template>
+                                        <template x-if="!match.isTopMatch">
+                                            <button @click="window.toggleTopMatch(match.id)" 
+                                                    style="margin-left: 4px; padding: 0 4px; border-radius: 4px; font-size: 0.7rem; background: transparent; color: #6b7280; border: 1px solid #374151; cursor: pointer; transition: all 0.2s;"
+                                                    title="Označit jako TOP">
+                                                🔥
+                                            </button>
+                                        </template>
+                                    </span>
+                                    <div class="match-teams" :style="'font-size: ' + window.vypocitejOptimalniPismo(match.domaci, match.hoste)"><span x-text="match.domaci"></span> – <span x-text="match.hoste"></span></div>
+                                </div>
+
+                                <div class="action-inputs">
+                                    <div class="user-tip-box admin-result-box">
+                                        <div class="user-tip-label result-label-color">Výsledek</div>
+                                        <template x-if="match.vysledek_domaci !== undefined">
+                                            <span class="user-tip-value result-value-color" x-html="window.formatujZobrazeneSkore(match.vysledek_domaci, match.vysledek_hoste, match.postup, $store.appState.selectedAdminLeague, match.isPlayoff, true)"></span>
+                                        </template>
+                                        <template x-if="match.vysledek_domaci === undefined">
+                                            <span class="user-tip-value no-tip">?:?</span>
+                                        </template>
+                                    </div>
+
+                                    <div class="match-input-selectors-group middle-slot-box">
+                                        <select :id="'admin-res-domaci-' + match.id" class="select-score" @change="window.handleAdminScoreChange(match.id, match.isPlayoff || false)">
+                                            <option value="">?</option>
+                                            <template x-for="i in Array.from({length: 21}, (_, i) => i)" :key="i">
+                                                <option :value="String(i)" :selected="parseInt(match.vysledek_domaci) === i" x-text="i"></option>
+                                            </template>
+                                        </select>
+                                        <span class="select-divider">:</span>
+                                        <select :id="'admin-res-hoste-' + match.id" class="select-score" @change="window.handleAdminScoreChange(match.id, match.isPlayoff || false)">
+                                            <option value="">?</option>
+                                            <template x-for="i in Array.from({length: 21}, (_, i) => i)" :key="i">
+                                                <option :value="String(i)" :selected="parseInt(match.vysledek_hoste) === i" x-text="i"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                    <button class="btn-tip" @click="window.saveRealResult(match.id)" x-text="match.vysledek_domaci !== undefined ? 'ZMĚŇ' : 'ULOŽ'"></button>
+                                </div>
+
+                                <div :id="'playoff-admin-box-' + match.id" 
+                                     class="playoff-result-box" 
+                                     :style="(match.isPlayoff || $store.appState.selectedAdminLeague === 'Tipsport Extraliga') && match.vysledek_domaci !== undefined && match.vysledek_hoste !== undefined && parseInt(match.vysledek_domaci) === parseInt(match.vysledek_hoste) ? 'display: flex;' : 'display: none;'"
+                                     x-cloak>
+                                    <div class="playoff-interactive-selector">
+                                        <span class="playoff-selector-label" x-text="$store.appState.selectedAdminLeague === 'Tipsport Extraliga' ? 'Vítěz zápasu do rozhodnutí:' : 'Postupující tým při remíze:'"></span>
+                                        <div class="playoff-buttons-wrapper">
+                                            <button type="button" 
+                                                    :id="'playoff-admin-dom-' + match.id"
+                                                    class="playoff-tile-btn"
+                                                    :class="{ 'is-active-tip': match.postup === 'domaci' }"
+                                                    @click="window.selectPlayoffAdmin(match.id, 'domaci')">
+                                                👉 <span x-text="match.domaci"></span>
+                                                <span class="playoff-tip-badge" x-show="match.postup === 'domaci'">VÍTĚZ</span>
+                                            </button>
+                                            <button type="button" 
+                                                    :id="'playoff-admin-hos-' + match.id"
+                                                    class="playoff-tile-btn"
+                                                    :class="{ 'is-active-tip': match.postup === 'hoste' }"
+                                                    @click="window.selectPlayoffAdmin(match.id, 'hoste')">
+                                                <span x-text="match.hoste"></span> 👈
+                                                <span class="playoff-tip-badge" x-show="match.postup === 'hoste'">VÍTĚZ</span>
+                                            </button>
+                                        </div>
+                                        <input type="hidden" :id="'playoff-admin-val-' + match.id" :value="match.postup || ''">
+                                    </div>
+                                </div>
+
+                                <div x-show="match.showEdit" style="width: 100%; flex-basis: 100%; background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #374151; margin-top: 8px; box-sizing: border-box; flex-shrink: 0;" x-transition x-cloak>
+                                    <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
+                                        <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
+                                            <label class="bonus-input-label" style="text-align: left; font-size: 0.72rem; color: #9ca3af; font-weight: bold; letter-spacing:0.3px;">📅 UPRAVIT DATUM A ČAS ZÁPASU:</label>
+                                            <input type="datetime-local" :id="'admin-edit-datum-' + match.id" :value="(() => { const d = new Date(match.datum?.seconds ? match.datum.seconds * 1000 : match.datum); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; })()" class="bonus-text-input" style="color-scheme: dark; height: 40px; padding: 6px 10px; margin: 0; width: 100%; box-sizing: border-box; text-align: left; font-size:0.9rem;">
+                                            <button class="action-btn" style="height: 36px; margin-top: 4px; padding: 0; background: #2563eb; font-size: 0.8rem; font-family: 'Oswald', sans-serif; width:100%; border-radius:8px;" @click="window.updateMatchDate(match.id)">ULOŽIT NOVÝ ČAS</button>
+                                        </div>
+                                        <div style="border-top: 1px dashed #374151; padding-top: 10px; display: flex; flex-direction: column; gap: 6px; width: 100%;">
+                                            <label class="bonus-input-label" style="text-align: left; font-size: 0.72rem; color: #fbbf24; font-weight: bold; letter-spacing:0.3px;">📊 RUČNÍ ZADÁNÍ KURZŮ (1 - X - 2):</label>
+                                            <div style="display: flex; gap: 8px; width: 100%;">
+                                                <div style="flex: 1;">
+                                                    <span style="font-size: 0.68rem; color: #9ca3af; display: block; margin-bottom: 2px;">1 (Domácí)</span>
+                                                    <input type="number" step="0.01" min="1.01" :id="'admin-edit-odd-1-' + match.id" :value="match.odds?.['1'] || ''" placeholder="1.85" class="bonus-text-input" style="height: 34px; padding: 4px 6px; text-align: center; font-weight: bold; font-size: 0.85rem; width: 100%; box-sizing: border-box;">
+                                                </div>
+                                                <div style="flex: 1;">
+                                                    <span style="font-size: 0.68rem; color: #9ca3af; display: block; margin-bottom: 2px;">X (Remíza)</span>
+                                                    <input type="number" step="0.01" min="1.01" :id="'admin-edit-odd-X-' + match.id" :value="match.odds?.['X'] || ''" placeholder="3.40" class="bonus-text-input" style="height: 34px; padding: 4px 6px; text-align: center; font-weight: bold; font-size: 0.85rem; width: 100%; box-sizing: border-box;">
+                                                </div>
+                                                <div style="flex: 1;">
+                                                    <span style="font-size: 0.68rem; color: #9ca3af; display: block; margin-bottom: 2px;">2 (Hosté)</span>
+                                                    <input type="number" step="0.01" min="1.01" :id="'admin-edit-odd-2-' + match.id" :value="match.odds?.['2'] || ''" placeholder="4.20" class="bonus-text-input" style="height: 34px; padding: 4px 6px; text-align: center; font-weight: bold; font-size: 0.85rem; width: 100%; box-sizing: border-box;">
+                                                </div>
+                                            </div>
+                                            <div style="display: flex; gap: 8px; margin-top: 4px; width: 100%;">
+                                                <button class="action-btn" style="height: 34px; margin: 0; padding: 0; background: #059669; font-size: 0.8rem; font-family: 'Oswald', sans-serif; flex: 1; border-radius: 8px;" @click="window.saveMatchOdds(match.id)">💾 ULOŽIT KURZY</button>
+                                                <button class="action-btn" style="height: 34px; margin: 0; padding: 0; background: #dc2626; font-size: 0.8rem; font-family: 'Oswald', sans-serif; flex: 1; border-radius: 8px;" @click="window.deleteMatchOdds(match.id)">🗑️ SMAZAT KURZ</button>
+                                            </div>
+                                        </div>
+                                        <div style="border-top: 1px dashed #374151; padding-top: 10px; display: flex; flex-direction: column; gap: 6px; width: 100%;">
+                                            <label class="bonus-input-label" style="text-align: left; font-size: 0.72rem; color: #fbbf24; font-weight: bold; letter-spacing: 0.3px;">⏳ STAV ZÁPASU (ODLOŽENÍ):</label>
+                                            <button type="button" class="action-btn" 
+                                                    :style="match.apiStatus === 'POSTPONED' ? 'height: 36px; margin: 0; padding: 0; background: #059669; border: 1px solid #10b981; font-size: 0.8rem; font-family: \'Oswald\', sans-serif; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; color: #ffffff;' : 'height: 36px; margin: 0; padding: 0; background: #d97706; border: 1px solid #f59e0b; font-size: 0.8rem; font-family: \'Oswald\', sans-serif; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; color: #ffffff;'" 
+                                                    @click="window.toggleMatchPostponed(match.id, match.apiStatus !== 'POSTPONED')">
+                                                <span x-text="match.apiStatus === 'POSTPONED' ? '▶️ VRÁTIT ZÁPAS JAKO AKTIVNÍ' : '⏳ OZNAČIT ZÁPAS JAKO ODLOŽENÝ'"></span>
+                                            </button>
+                                        </div>
+                                        <div style="border-top: 1px dashed #374151; padding-top: 10px; display: flex; flex-direction: column; gap: 4px; text-align: center; width: 100%;">
+                                            <span style="color: #ef4444; font-size: 0.72rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">⚠️ DANGER ZONE / NEZVRATNÁ AKCE</span>
+                                            <button class="action-btn" style="height: 36px; margin-top: 6px; padding: 0; background: #dc2626; font-size: 0.8rem; font-family: 'Oswald', sans-serif; width:100%; border-radius:8px;" @click="window.deleteMatch(match.id)">🗑️ SMAZAT ZÁPAS Z SYSTÉMU</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1411,12 +1388,9 @@
                 <label class="bonus-input-label" style="display: block; margin-bottom: 6px; font-weight: bold; color: #ea580c; font-size: 0.82rem;">ZVOLIT SOUTĚŽ PRO PROXY ZÁPIS:</label>
                 <select id="proxy-league-select" x-model="$store.appState.loutkovodicSelectedLeague" class="bonus-text-input" style="width: 100%; height: 42px; background: #111827; color: #fff; border-color: #4b5563; font-weight: bold; font-family: 'Oswald', sans-serif;" @change="window.loadLoutkovodicLeagueData()">
                     <option value="" disabled>-- Vyber ligu --</option>
-                    <option value="MS v hokeji">🏒 MS V HOKEJI</option>
-                    <option value="MS ve fotbale">⚽ MS VE FOTBALE</option>
-                    <option value="Tipsport Extraliga">🏒 TIPSPORT EXTRALIGA</option>
-                    <option value="Chance Liga">⚽ CHANCE LIGA</option>
-                    <option value="Premier League">⚽ PREMIER LEAGUE</option>
-                    <option value="Liga mistrů">⚽ LIGA MISTRŮ</option>
+                    <template x-for="l in $store.appState.loutkovodicAvailableLeagues" :key="l">
+                        <option :value="l" x-text="(l.includes('Extraliga') || l.includes('hokej') ? '🏒 ' : '⚽ ') + l.toUpperCase()"></option>
+                    </template>
                 </select>
             </div>
 

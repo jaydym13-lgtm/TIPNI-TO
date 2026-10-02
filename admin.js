@@ -31,7 +31,7 @@ window.renderAdminMatches = async () => {
         return;
     }
 
-    if (store.currentScreen !== 'adminScreen') {
+    if (store.currentScreen !== 'adminScreen' && store.currentScreen !== 'superAdminScreen') {
         window.adminCurrentListeningKey = null;
         store.adminMatchesLoaded = false;
         return;
@@ -304,7 +304,7 @@ window.deleteMatchOdds = async (matchId) => {
     }
 };
 
-// ADMIN: PŘEPÍNAČ TOP ZÁPASU (2x BODY) S JISTIČEM NA MAX 1 TOP ZÁPAS NA KOLO
+// ADMIN: PŘEPÍNAČ TOP ZÁPASU (2x BODY) PŘES CLOUD FUNKCI S OKAMŽITOU R2 SYNCHRONIZACÍ
 window.toggleTopMatch = async (matchId) => {
     const store = Alpine.store('appState');
     const activeAdminLeague = store?.selectedAdminLeague;
@@ -317,26 +317,41 @@ window.toggleTopMatch = async (matchId) => {
     const budeTop = !cilovyZapas.isTopMatch;
     const koloCilovehoZapasu = window.prelozFaziTurnaje(cilovyZapas.stage, cilovyZapas.kolo, cilovyZapas.isPlayoff);
 
-    try {
-        const batch = writeBatch(window.db);
-
-        if (budeTop) {
-            zapasy.forEach(m => {
-                const kKola = window.prelozFaziTurnaje(m.stage, m.kolo, m.isPlayoff);
-                if (kKola === koloCilovehoZapasu && m.isTopMatch && m.id !== matchId) {
-                    const staryRef = doc(window.db, 'ligy', activeAdminLeague, 'sezony', sezonaId, 'zapasy', m.id);
-                    batch.update(staryRef, { isTopMatch: false });
+    // ⚡ 1. OKAMŽITÝ LOKÁLNÍ MICRO-PATCH (0 ms odezva v otevřeném okně)
+    if (budeTop) {
+        zapasy.forEach(m => {
+            const kKola = window.prelozFaziTurnaje(m.stage, m.kolo, m.isPlayoff);
+            if (kKola === koloCilovehoZapasu && m.id !== matchId) {
+                m.isTopMatch = false;
+                if (store.rozpisData?.zapasyMapa?.[m.id]) {
+                    store.rozpisData.zapasyMapa[m.id].isTopMatch = false;
                 }
-            });
-        }
+            }
+        });
+    }
+    cilovyZapas.isTopMatch = budeTop;
+    if (store.rozpisData?.zapasyMapa?.[matchId]) {
+        store.rozpisData.zapasyMapa[matchId].isTopMatch = budeTop;
+        store.obnovCacheTimeline();
+    }
 
-        const cilovyRef = doc(window.db, 'ligy', activeAdminLeague, 'sezony', sezonaId, 'zapasy', matchId);
-        batch.update(cilovyRef, { isTopMatch: budeTop });
+    window.showToast(budeTop ? "⏳ Nastavuji TOP ZÁPAS (2x body)..." : "⏳ Odebírám TOP ZÁPAS...", false);
 
-        await batch.commit();
+    // 🚀 2. BEZPEČNÝ ATOMICKÝ ZÁPIS PŘES CLOUD FUNKCI NA FIRESTORE + R2 + PULS
+    try {
+        const toggleTopMatchCF = httpsCallable(window.functions, 'toggleTopMatchCF');
+        await toggleTopMatchCF({
+            leagueName: activeAdminLeague,
+            matchId: matchId,
+            sezonaId: sezonaId
+        });
+
         window.showToast(budeTop ? "🔥 Zápas označen jako TOP ZÁPAS (2x body)!" : "ℹ️ Označení TOP ZÁPAS odebráno.");
+        window.renderAdminMatches();
     } catch (e) {
-        alert("Chyba při změně TOP zápasu: " + e.message);
+        console.error("Chyba při změně TOP zápasu:", e);
+        window.showToast("❌ Chyba při změně TOP zápasu: " + (e.message || "Server odmítl zápis"), true);
+        window.renderAdminMatches();
     }
 };
 
@@ -797,26 +812,33 @@ window.saveAllAdminResults = async () => {
 window.toggleUserAdmin = async (uid, checked) => {
     window.showToast("⏳ Aktualizuji admin roli...", false);
     
-    if (window.adminUsersCache) {
-        const uDoc = window.adminUsersCache.find(d => d.id === uid);
-        if (uDoc && typeof uDoc.data === 'function') {
-            uDoc.data().isAdmin = checked;
-        }
-    }
-
     try {
         const userRef = doc(window.db, 'users', uid);
         const docSnap = await getDoc(userRef);
-        const currentLeagues = docSnap.exists() ? (docSnap.data().leagues || []) : [];
+        const uData = docSnap.exists() ? docSnap.data() : {};
+        const currentLeagues = uData.leagues || [];
+        const currentAdminLeagues = uData.adminLeagues || [];
 
         const managePermissions = httpsCallable(window.functions, 'manageUserPermissionsCF');
         
         await managePermissions({
             targetUid: uid,
             isAdminRole: checked,
-            leagues: currentLeagues
+            leagues: currentLeagues,
+            adminLeagues: currentAdminLeagues
         });
+
+        if (window.adminUsersCache) {
+            const uCache = window.adminUsersCache.find(d => d.id === uid);
+            if (uCache) {
+                const cData = typeof uCache.data === 'function' ? uCache.data() : uCache;
+                cData.isAdmin = checked;
+            }
+        }
         
+        const boxEl = document.getElementById(`admin-leagues-box-${uid}`);
+        if (boxEl) boxEl.style.display = checked ? 'block' : 'none';
+
         window.showToast(checked ? "👑 Práva administrátora udělena!" : "ℹ️ Práva administrátora odebrána.");
     } catch (e) { 
         console.error(e); 
@@ -829,8 +851,10 @@ window.toggleUserLeague = async (uid, leagueName, checked) => {
     try {
         const userRef = doc(window.db, 'users', uid);
         const docSnap = await getDoc(userRef);
-        let currentLeagues = docSnap.exists() ? (docSnap.data().leagues || []) : [];
-        const currentAdmin = docSnap.exists() ? (docSnap.data().isAdmin || false) : false;
+        const uData = docSnap.exists() ? docSnap.data() : {};
+        let currentLeagues = [...(uData.leagues || [])];
+        const currentAdmin = uData.isAdmin || false;
+        const currentAdminLeagues = uData.adminLeagues || [];
 
         if (checked) {
             if (!currentLeagues.includes(leagueName)) currentLeagues.push(leagueName);
@@ -843,13 +867,59 @@ window.toggleUserLeague = async (uid, leagueName, checked) => {
         await managePermissions({
             targetUid: uid,
             isAdminRole: currentAdmin,
-            leagues: currentLeagues
+            leagues: currentLeagues,
+            adminLeagues: currentAdminLeagues
         });
 
-        window.showToast(`🎯 Licenční klíč pro ligu aktualizován!`);
+        if (window.adminUsersCache) {
+            const uCache = window.adminUsersCache.find(d => d.id === uid);
+            if (uCache) {
+                const cData = typeof uCache.data === 'function' ? uCache.data() : uCache;
+                cData.leagues = currentLeagues;
+            }
+        }
+
+        window.showToast("🎯 Licenční klíč pro ligu aktualizován!");
     } catch (e) { 
         console.error(e); 
         window.showToast("❌ Server zamítl aktualizaci ligy.", true);
+    }
+};
+
+window.toggleUserAdminLeague = async (uid, leagueName, checked) => {
+    window.showToast("⏳ Aktualizuji kompetence správce...", false);
+    try {
+        const userRef = doc(window.db, 'users', uid);
+        const docSnap = await getDoc(userRef);
+        const uData = docSnap.exists() ? docSnap.data() : {};
+        let currentAdminLeagues = [...(uData.adminLeagues || [])];
+
+        if (checked) {
+            if (!currentAdminLeagues.includes(leagueName)) currentAdminLeagues.push(leagueName);
+        } else {
+            currentAdminLeagues = currentAdminLeagues.filter(l => l !== leagueName);
+        }
+
+        const managePermissions = httpsCallable(window.functions, 'manageUserPermissionsCF');
+        await managePermissions({
+            targetUid: uid,
+            isAdminRole: uData.isAdmin || false,
+            leagues: uData.leagues || [],
+            adminLeagues: currentAdminLeagues
+        });
+
+        if (window.adminUsersCache) {
+            const uCache = window.adminUsersCache.find(d => d.id === uid);
+            if (uCache) {
+                const cData = typeof uCache.data === 'function' ? uCache.data() : uCache;
+                cData.adminLeagues = currentAdminLeagues;
+            }
+        }
+
+        window.showToast("🎯 Kompetence správce aktualizovány!");
+    } catch (e) {
+        console.error(e);
+        window.showToast("❌ Server zamítl aktualizaci kompetencí.", true);
     }
 };
 
@@ -885,19 +955,23 @@ window.renderSuperAdmin = async (targetTab = null) => {
     const tab = window.superAdminActiveTab;
 
     const btnStyleUsers = tab === 'users' ? 'background: #059669; color: white; border-color: #10b981;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;';
+    const btnStyleMatches = tab === 'matches' ? 'background: #2563eb; color: white; border-color: #60a5fa;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;';
     const btnStyleTools = tab === 'tools' ? 'background: #ea580c; color: white; border-color: #f97316;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;';
     const btnStyleOdds = tab === 'odds' ? 'background: #d97706; color: white; border-color: #fbbf24;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;';
     const missingCount = store.missingOddsCount || 0;
 
     container.innerHTML = `
-        <div class="leaderboard-tabs-wrapper" style="margin-bottom: 15px; width: 100%; box-sizing: border-box; display: flex; gap: 6px;">
-            <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 4px; font-size: 0.75rem; ${btnStyleUsers}" onclick="window.switchSuperAdminTab('users');">
+        <div class="leaderboard-tabs-wrapper" style="margin-bottom: 15px; width: 100%; box-sizing: border-box; display: flex; gap: 4px;">
+            <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 2px; font-size: 0.72rem; ${btnStyleUsers}" onclick="window.switchSuperAdminTab('users');">
                 👥 UŽIVATELÉ
             </button>
-            <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 4px; font-size: 0.75rem; ${btnStyleTools}" onclick="window.switchSuperAdminTab('tools');">
+            <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 2px; font-size: 0.72rem; ${btnStyleMatches}" onclick="window.switchSuperAdminTab('matches');">
+                ⚽ ZÁPASY
+            </button>
+            <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 2px; font-size: 0.72rem; ${btnStyleTools}" onclick="window.switchSuperAdminTab('tools');">
                 🔧 ZÁCHRANA
             </button>
-            <button class="nav-btn-leaderboard" style="flex: 1.15; height: 38px; padding: 0 4px; font-size: 0.75rem; position: relative; ${btnStyleOdds}" onclick="window.switchSuperAdminTab('odds');">
+            <button class="nav-btn-leaderboard" style="flex: 1.1; height: 38px; padding: 0 2px; font-size: 0.72rem; position: relative; ${btnStyleOdds}" onclick="window.switchSuperAdminTab('odds');">
                 📊 KURZY ${missingCount > 0 ? `<span style="background:#ef4444; color:#fff; border-radius:10px; padding:1px 5px; font-size:0.65rem; margin-left:2px; font-weight:800;">${missingCount}</span>` : ''}
             </button>
         </div>
@@ -906,6 +980,14 @@ window.renderSuperAdmin = async (targetTab = null) => {
 
     const contentArea = document.getElementById('superAdminTabContentArea');
     if (!contentArea) return;
+
+    if (tab === 'matches') {
+        contentArea.innerHTML = '<div id="superAdminMatchesMountPoint"></div>';
+        if (typeof window.renderAdminMatches === 'function') {
+            window.renderAdminMatches();
+        }
+        return;
+    }
 
     if (tab === 'odds') {
         const missingList = store.missingOddsList || [];
@@ -1230,21 +1312,50 @@ window.vykresliSuperAdminUzivatele = (docsArray) => {
                 </div>
             </div>
             <div class="leaderboard-row-dropdown" style="display: none; background: #0f172a; border: 1px solid #374151; border-top: none; padding: 15px; border-radius: 0 0 8px 8px; margin-top: -4px; flex-direction: column; gap: 12px; text-align: left;">
-                <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1f2937; padding-bottom: 10px;">
-                    <span style="font-size: 0.8rem; color: #9ca3af;">📧 E-mail:</span>
-                    <span style="color: #f3f4f6; font-size: 0.85rem; font-family: monospace; font-weight: bold;">${email}</span>
+                    <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1f2937; padding-bottom: 8px;">
+                        <span style="font-size: 0.8rem; color: #9ca3af;">📧 E-mail:</span>
+                        <span style="color: #f3f4f6; font-size: 0.85rem; font-family: monospace; font-weight: bold;">${email}</span>
+                    </div>
+
+                    <!-- 🏆 HERNÍ LICENCE HRÁČE (SPRAVUJE VÝHRADNĚ SUPERADMIN) -->
+                    <div style="border-bottom: 1px solid #1f2937; padding-bottom: 10px;">
+                        <span style="font-size: 0.78rem; color: #fbbf24; font-family: 'Oswald', sans-serif; font-weight: bold; letter-spacing: 0.4px; display: block; margin-bottom: 8px;">🏆 HERNÍ LICENCE HRÁČE (CO TIPUJE):</span>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                            ${(CONFIG.MASTER_LEAGUES || ['Chance Liga', 'Premier League', 'Liga mistrů', 'MS ve fotbale', 'Tipsport Extraliga', 'MS v hokeji']).map(lName => `
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #e5e7eb; cursor: pointer; user-select: none;">
+                                    <input type="checkbox" ${(data.leagues || []).includes(lName) ? 'checked' : ''} onchange="window.toggleUserLeague('${uid}', '${lName}', this.checked)" style="width: 15px; height: 15px; cursor: pointer; accent-color: #10b981; margin: 0;">
+                                    <span>${lName}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- 👑 ROLE ADMINA -->
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.85rem; color: #e5e7eb; font-weight: bold;">Udělit práva Admin panelu:</span>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #ef4444; font-weight: bold; cursor: pointer; user-select: none;">
+                            <input type="checkbox" ${data.isAdmin ? 'checked' : ''} onchange="window.toggleUserAdmin('${uid}', this.checked)" style="width: 18px; height: 18px; cursor: pointer; accent-color: #ef4444; margin: 0;"> ADMIN ROLE
+                        </label>
+                    </div>
+
+                    <!-- 🏒 KOMPETENCE SPRÁVCE (POVOLENÉ LIGY PRO SPRÁVU) -->
+                    <div id="admin-leagues-box-${uid}" style="display: ${data.isAdmin ? 'block' : 'none'}; background: rgba(239, 68, 68, 0.06); border: 1px dashed rgba(239, 68, 68, 0.35); border-radius: 8px; padding: 10px; margin-top: -4px;">
+                        <span style="font-size: 0.76rem; color: #f87171; font-family: 'Oswald', sans-serif; font-weight: bold; letter-spacing: 0.3px; display: block; margin-bottom: 6px;">⚙️ KOMPETENCE SPRÁVCE (KTERÉ LIGY SMÍ SPRAVOVAT):</span>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                            ${(CONFIG.MASTER_LEAGUES || ['Chance Liga', 'Premier League', 'Liga mistrů', 'MS ve fotbale', 'Tipsport Extraliga', 'MS v hokeji']).map(lName => `
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: #cbd5e1; cursor: pointer; user-select: none;">
+                                    <input type="checkbox" ${(data.adminLeagues || []).includes(lName) ? 'checked' : ''} onchange="window.toggleUserAdminLeague('${uid}', '${lName}', this.checked)" style="width: 14px; height: 14px; cursor: pointer; accent-color: #ef4444; margin: 0;">
+                                    <span>${lName}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div style="border-top: 1px dashed #374151; padding-top: 12px; margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: #9ca3af; font-size: 0.75rem; font-weight: bold;">🚨 Smazat kompletně data hráče:</span>
+                        <button class="btn-tip" style="height: 32px; width: auto; padding: 0 12px; background: #dc2626; font-size: 0.72rem; font-weight:bold; font-family:'Oswald',sans-serif;" onclick="window.purgeUserAbsolute('${uid}')">🗑️ SMAZAT ÚČET</button>
+                    </div>
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 0.85rem; color: #e5e7eb; font-weight: bold;">Udělit práva Admin panelu:</span>
-                    <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #ef4444; font-weight: bold; cursor: pointer; user-select: none;">
-                        <input type="checkbox" ${data.isAdmin ? 'checked' : ''} onchange="window.toggleUserAdmin('${uid}', this.checked)" style="width: 18px; height: 18px; cursor: pointer; accent-color: #ef4444; margin: 0;"> ADMIN ROLE
-                    </label>
-                </div>
-                <div style="border-top: 1px dashed #374151; padding-top: 12px; margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="color: #9ca3af; font-size: 0.75rem; font-weight: bold;">🚨 Smazat kompletně data hráče:</span>
-                    <button class="btn-tip" style="height: 32px; width: auto; padding: 0 12px; background: #dc2626; font-size: 0.72rem; font-weight:bold; font-family:'Oswald',sans-serif;" onclick="window.purgeUserAbsolute('${uid}')">🗑️ SMAZAT ÚČET</button>
-                </div>
-            </div>
         `;
         wrapper.appendChild(userRow);
     });
@@ -1393,12 +1504,15 @@ window.renderAdminRecalc = () => {
             <div style="margin-bottom: 15px;">
                 <label style="color: #9ca3af; font-size: 0.8rem; display: block; margin-bottom: 5px; font-weight: bold;">Zvolit soutěž k přepočtu:</label>
                 <select id="recalc-league-select" style="width: 100%; height: 42px; background: #111827; color: #ffffff; border: 1px solid #4b5563; border-radius: 8px; font-weight: bold; padding: 0 10px; box-sizing: border-box;">
-                    <option value="MS v hokeji">🏒 MS V HOKEJI</option>
-                    <option value="MS ve fotbale" selected>⚽ MS VE FOTBALE</option>
-                    <option value="Tipsport Extraliga">🏒 TIPSPORT EXTRALIGA</option>
-                    <option value="Chance Liga">⚽ CHANCE LIGA</option>
-                    <option value="Premier League">⚽ PREMIER LEAGUE</option>
-                    <option value="Liga mistrů">⚽ LIGA MISTRŮ</option>
+                    ${(() => {
+                        const store = Alpine.store('appState');
+                        const isSuper = store?.isSuperAdmin;
+                        const myAdminLeagues = isSuper ? CONFIG.MASTER_LEAGUES : (store?.adminLeagues || CONFIG.MASTER_LEAGUES);
+                        return myAdminLeagues.map(l => {
+                            const icon = l.includes('Extraliga') || l.includes('hokej') ? '🏒' : '⚽';
+                            return `<option value="${l}">${icon} ${l.toUpperCase()}</option>`;
+                        }).join('');
+                    })()}
                 </select>
             </div>
             <button id="global-recalc-btn" class="action-btn" onclick="window.triggerGlobalRecalculation()" style="background: #dc2626; color: white; width: 100%; font-weight: bold; font-family: 'Oswald', sans-serif; height: 44px; font-size: 0.9rem; border-radius: 8px; margin: 0; cursor: pointer;">
@@ -1464,8 +1578,13 @@ window.openLoutkovodicModal = (uid, allowAdmin = false) => {
                || window.adminUsersCache?.find(u => u.id === uid)
                || {};
     
-    if (!allowAdmin && (uItem.isAdmin || uItem.isSuperAdmin)) {
-        window.showToast("⛔ Loutkovodič je pro účty administrátorů zakázán! (Použij záložku Záchrana bodů)", true);
+    if (uItem.isSuperAdmin) {
+        window.showToast("⛔ Účet Super Admina nelze ovládat přes Loutkovodiče!", true);
+        return;
+    }
+
+    if (!allowAdmin && !store.canProxyUser(uItem)) {
+        window.showToast("⛔ Pro tohoto hráče nemáš oprávnění loutkovodiče v žádné soutěži!", true);
         return;
     }
 

@@ -23,6 +23,7 @@ exports.saveMatchOddsCF = adminModule.saveMatchOddsCF;
 exports.deleteMatchOddsCF = adminModule.deleteMatchOddsCF;
 exports.deleteMatchCF = adminModule.deleteMatchCF;
 exports.toggleMatchPostponedCF = adminModule.toggleMatchPostponedCF;
+exports.toggleTopMatchCF = adminModule.toggleTopMatchCF;
 exports.syncAllUsersToRtdbCF = adminModule.syncAllUsersToRtdbCF;
 exports.deleteMyAccountCF = adminModule.deleteMyAccountCF;
 

@@ -20,27 +20,28 @@ service cloud.firestore {
       // 🔒 Bezpečné čtení: Hráč vidí svůj profil pro přihlášení, Admin vidí všechny pro soupisku
       allow read: if isLogged() && (request.auth.uid == userId || isAdmin());
       
-      // 🔓 Povolí vytvoření profilu (přidělení admin práv blokováno)
+      // 🔓 Povolí vytvoření profilu (přidělení admin práv i kompetencí blokováno)
       allow create: if isLogged() && (
         isSuperAdmin() || (
           request.auth.uid == userId && 
           request.resource.data.get('isAdmin', false) == false && 
-          request.resource.data.get('isSuperAdmin', false) == false
+          request.resource.data.get('isSuperAdmin', false) == false &&
+          request.resource.data.get('adminLeagues', []).size() == 0
         )
       );
 
-      // 🛡️ NEPRŮSTŘELNÝ UPDATE: Admin smí vše, hráč smí upravit profil, 24h cooldown na pořadí a zapsat POUZE Ligu mistrů
+      // 🛡️ NEPRŮSTŘELNÝ UPDATE: Super Admin smí vše, hráč smí upravit profil, 24h cooldown na pořadí
       allow update: if isLogged() && (
-        isAdmin() ||
+        isSuperAdmin() ||
         (
           request.auth.uid == userId && 
           request.resource.data.get('isAdmin', false) == false && 
           request.resource.data.get('isSuperAdmin', false) == false &&
           
-          // 🛑 ZÁKAZ ZMĚNY ADMIN PRÁV
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin', 'isSuperAdmin']) &&
+          // 🛑 ZÁKAZ ZMĚNY ADMIN PRÁV A KOMPETENCÍ
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin', 'isSuperAdmin', 'adminLeagues']) &&
           
-          // 🏆 LICENCE: Běžný hráč nesmí pole 'leagues' vůbec měnit (spravuje pouze Admin)
+          // 🏆 LICENCE: Běžný hráč nesmí pole 'leagues' vůbec měnit (spravuje výhradně Super Admin)
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['leagues']) &&
           
           // ⏱️ 24H COOLDOWN & INTEGRITA: Platí pouze pro uživatelské pořadí soutěží (leagueOrder)
@@ -56,16 +57,17 @@ service cloud.firestore {
         )
       );
       
-      allow delete: if isSuperAdmin() || isAdmin();
+      // 🗑️ Mazat účty hráčů smí pouze Super Admin
+      allow delete: if isSuperAdmin();
 
-      // 🔒 SEZÓNNÍ TIPY: Čtení pro majitele/admina, zápis přes Cloud Functions (Admin SDK)
+      // 🔒 SEZÓNNÍ TIPY: Čtení pro majitele/admina, zápis přes Cloud Functions (Admin SDK) nebo Super Admina
       match /sezony/{sezonaId} {
         allow read: if isLogged() && (request.auth.uid == userId || isAdmin());
-        allow write: if isAdmin();
+        allow write: if isSuperAdmin();
         
         match /{subcollection=**} {
           allow read: if isLogged() && (request.auth.uid == userId || isAdmin());
-          allow write: if isAdmin();
+          allow write: if isSuperAdmin();
         }
       }
     }
@@ -73,33 +75,33 @@ service cloud.firestore {
     // --- LIGOVÝ APARÁT, SEZÓNY A ZÁPASY ---
     match /ligy/{ligaId} {
       allow read: if isLogged();
-      allow write: if isAdmin();
+      allow write: if isSuperAdmin();
 
       match /sezony/{sezonaId} {
         allow read: if isLogged();
-        allow write: if isAdmin();
+        allow write: if isSuperAdmin();
 
         match /zapasy/{zapasId} {
           allow read: if isLogged();
-          allow write: if isAdmin();
+          allow write: if isSuperAdmin();
         }
       }
 
       match /zapasy/{zapasId} {
         allow read: if isLogged();
-        allow write: if isAdmin();
+        allow write: if isSuperAdmin();
       }
 
       match /stav/{stavId} {
         allow read: if isLogged();
-        allow write: if isAdmin();
+        allow write: if isSuperAdmin();
       }
     }
 
     // --- SYSTÉMOVÁ KONFIGURACE (BOT CONFIG / SYSTEM) ---
     match /system/{docId} {
       allow read: if isLogged();
-      allow write: if isAdmin();
+      allow write: if isSuperAdmin();
     }
 
     // --- 📊 PRŮZKUMY & ANKETY ---

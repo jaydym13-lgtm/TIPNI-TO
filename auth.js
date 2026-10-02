@@ -218,7 +218,6 @@ window.registerWithEmail = async () => {
 
     try {
         const cred = await createUserWithEmailAndPassword(window.auth, email, pass);
-        await vytvorProfilNovehoHrace(cred.user);
     } catch (err) {
         if (typeof window.hideSplash === 'function') window.hideSplash();
         console.error("Chyba registrace e-mailem:", err);
@@ -468,6 +467,7 @@ const vykonejBezpecnyAuthRouting = (user) => {
         }
         store.isAdmin = false;
         store.isSuperAdmin = false;
+        store.adminLeagues = [];
         store.nickname = '';
         store._leagues = [];
         
@@ -509,6 +509,7 @@ const vykonejBezpecnyAuthRouting = (user) => {
         // ⚡ OKAMŽITÁ HYDRATACE Z DISKOVÉ CACHE (0 ms bez čekání na síť)
         store.isSuperAdmin = userData?.isSuperAdmin === true;
         store.isAdmin = userData?.isAdmin === true || store.isSuperAdmin;
+        store.adminLeagues = userData?.adminLeagues || [];
         store.canLinkGoogle = !user.providerData.some(p => p.providerId === 'google.com');
         store.leagueOrder = userData?.leagueOrder || [];
         store.lastLeagueOrderChange = userData?.lastLeagueOrderChange?.toMillis ? userData.lastLeagueOrderChange.toMillis() : (userData?.lastLeagueOrderChange || 0);
@@ -580,6 +581,9 @@ const vykonejBezpecnyAuthRouting = (user) => {
             const claims = tokenResult?.claims || {};
             if (claims.isSuperAdmin) store.isSuperAdmin = true;
             if (claims.isAdmin) store.isAdmin = true;
+            if (claims.adminLeagues && Array.isArray(claims.adminLeagues)) {
+                store.adminLeagues = claims.adminLeagues;
+            }
             if (claims.leagues && (!store.leagues || store.leagues.length === 0)) {
                 store.leagues = claims.leagues;
             }

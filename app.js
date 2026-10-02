@@ -64,7 +64,64 @@ const vstrikniStoresDoPameti = () => {
         superAdminActiveTab: 'users', // 👑 Aktivní podzáložka SuperAdmin kokpitu ('users' | 'tools' | 'odds')
         adminMatches: [],
         adminUsers: [],
+        adminLeagues: [], // 🏒 Seznam lig, které smí přihlášený admin spravovat
         adminOpenedUserId: null, // 🔒 Držák otevřeného uživatele v Admin panelu (null = vše zavřeno)
+
+        // 🎯 LIGY, KTERÉ MÁ SPRÁVCE POVOLENÉ OVLÁDAT (Super Admin má vše, běžný admin jen své)
+        get allowedAdminLeagues() {
+            if (this.isSuperAdmin) return CONFIG.MASTER_LEAGUES || [];
+            if (this.adminLeagues && Array.isArray(this.adminLeagues) && this.adminLeagues.length > 0) {
+                return this.adminLeagues;
+            }
+            return [];
+        },
+
+        // 👥 SOUPISKA HRÁČŮ VYFILTROVANÁ POUZE PRO SOUTĚŽE DANÉHO SPRÁVCE
+        get filteredAdminUsers() {
+            if (this.isSuperAdmin) return this.adminUsers || [];
+            const povoleneLigy = this.allowedAdminLeagues;
+            return (this.adminUsers || []).filter(u => {
+                const hracovyLigy = u.leagues || [];
+                return hracovyLigy.some(l => povoleneLigy.includes(l));
+            });
+        },
+        // 🛡️ ZDA MÁ HRÁČ V MÝCH KOMPETENCÍCH ROLI ADMINA (V cizí lize je běžný hráč)
+        isUserAdminInContext(userItem) {
+            if (!userItem) return false;
+            if (userItem.isSuperAdmin) return true;
+            if (this.isSuperAdmin) return userItem.isAdmin === true;
+            const mojeLigy = this.allowedAdminLeagues || [];
+            const jehoAdminLigy = userItem.adminLeagues || [];
+            return jehoAdminLigy.some(l => mojeLigy.includes(l));
+        },
+
+        // 🎭 LZE HRÁČE LOUTKOVODIT? (Nesmí být Super Admin a v mých ligách nesmí být správcem)
+        canProxyUser(userItem) {
+            if (!userItem || userItem.isSuperAdmin) return false;
+            if (this.isSuperAdmin) return true;
+            const mojeLigy = this.allowedAdminLeagues || [];
+            const jehoLigy = userItem.leagues || [];
+            const jehoAdminLigy = userItem.adminLeagues || [];
+            return mojeLigy.some(l => jehoLigy.includes(l) && !jehoAdminLigy.includes(l));
+        },
+
+        // 📋 SOUTĚŽE DOSTUPNÉ V LOUTKOVODIČI PRO KONKRÉTNÍHO VYBRANÉHO HRÁČE
+        get loutkovodicAvailableLeagues() {
+            const uid = this.loutkovodicTargetUid;
+            if (!uid) return this.allowedAdminLeagues || [];
+            const target = (this.adminUsers || []).find(u => u.id === uid) 
+                        || (this.adminManagers || []).find(u => u.id === uid) 
+                        || {};
+            const targetLeagues = target.leagues || [];
+            const targetAdminLeagues = target.adminLeagues || [];
+            const mojeLigy = this.allowedAdminLeagues || [];
+
+            if (this.isSuperAdmin) {
+                return targetLeagues.length > 0 ? targetLeagues : mojeLigy;
+            }
+
+            return mojeLigy.filter(l => targetLeagues.includes(l) && !targetAdminLeagues.includes(l));
+        },
         myOvr: parseInt(localStorage.getItem('tipni_cache_my_ovr') || '0', 10),
         profileTargetUid: null,
         profileReturnScreen: 'leaguesScreen',
@@ -335,10 +392,12 @@ const vstrikniStoresDoPameti = () => {
             return vyfiltrovane;
         },
 
-        // 🔒 ZAMYKACÍ ZÁMEK: Pro hosta vrátí false (zamkne roletky i tlačítka uložení tipů)
+        // 🔒 ZAMYKACÍ ZÁMEK: Vrátí true pouze pro soutěže, které má hráč schválené v licenci
         get isEnrolledInSelectedLeague() {
             if (this.isGuest) return false;
-            return true;
+            if (this.isSuperAdmin) return true;
+            const mojeLigy = this._leagues || [];
+            return mojeLigy.includes(this.selectedLeague);
         },
 
         set leagues(val) {
@@ -1675,13 +1734,6 @@ const initTipniToAlpine = () => {
             }
             return;
         }
-
-            const povoleneLigy = store._leagues && store._leagues.length > 0 ? store._leagues : store.leagues;
-            if (!store.isSuperAdmin && (!povoleneLigy || !povoleneLigy.includes(leagueName))) {
-                if (typeof window.showToast === 'function') window.showToast("Do této tipovačky tě admin ještě neschválil! 🚧", true);
-                if (typeof window.hideSplash === 'function') window.hideSplash();
-                return;
-            }
 
             // 🔒 AUTO-RESET: Při změně ligy vždy startujeme se zavřenou roletkou rekordů i karet hráčů
             window.leaderboardRecordsOpen = false;

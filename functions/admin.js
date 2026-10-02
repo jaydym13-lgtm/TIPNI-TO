@@ -48,6 +48,9 @@ const manageUserPermissionsCF = onCall(async (request) => {
       adminLeagues: safeAdminLeagues
     });
 
+    // 🔒 BLESKOVÉ ZNEPLATNĚNÍ RELACE: Hráč nemůže ani minutu surfovat se starými právy
+    await auth.revokeRefreshTokens(targetUid);
+
     const vsechnyDostupneLigy = ['Chance Liga', 'Premier League', 'Liga mistrů', 'MS ve fotbale', 'Tipsport Extraliga', 'MS v hokeji'];
     const registrPromises = vsechnyDostupneLigy.map(async (liga) => {
       const registrRef = db.collection("ligy").doc(liga).collection("stav").doc("registrovani");
@@ -93,6 +96,9 @@ const purgeUserAbsoluteCF = onCall(async (request) => {
     batch.delete(db.collection("users").doc(targetUid));
 
     await batch.commit();
+    try {
+      await auth.revokeRefreshTokens(targetUid);
+    } catch (e) {}
     await auth.deleteUser(targetUid);
 
     // ⚡ RTDB SYNCHRONIZACE: Okamžité vymazání soupisky i online přítomnosti

@@ -616,17 +616,18 @@ const vstrikniStoresDoPameti = () => {
                 const obaNeznamy = (z.domaci === 'Neznámý' && z.hoste === 'Neznámý');
                 return !jeVyhodnoceny && !obaNeznamy && !this.jeZapasOdlozenyBezTerminu(z);
             });
-            const listKol = budouci.map(z => window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff));
-            const unikatni = [...new Set(listKol)].filter(k => String(k).trim() !== '');
-            const maCisla = unikatni.some(k => /\d+/.test(k));
-            if (maCisla) {
-                unikatni.sort((a, b) => {
-                    const numA = parseInt(String(a).replace(/[^0-9]/g, ''), 10) || 0;
-                    const numB = parseInt(String(b).replace(/[^0-9]/g, ''), 10) || 0;
-                    return numA - numB;
-                });
-            }
-            return ['Nadcházející zápasy', ...unikatni];
+            // 📅 ČISTÁ CHRONOLOGIE: Kola se řadí podle data jejich nejbližšího neodehraného zápasu
+            const kolaPoradi = [];
+            const videno = new Set();
+            budouci.forEach(z => {
+                const nazev = window.prelozFaziTurnaje ? window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff) : (z.kolo || '');
+                const cisty = String(nazev).trim();
+                if (cisty && !videno.has(cisty)) {
+                    videno.add(cisty);
+                    kolaPoradi.push(cisty);
+                }
+            });
+            return ['Nadcházející zápasy', ...kolaPoradi];
         },
 
         // 🎯 CENTRÁLNÍ PIPELINE PRO NADCHÁZEJÍCÍ ZÁPASY A VÝSLEDKY (ČISTÁ ČASOVÁ OSA S PRIORITOU MIN. 8 ZÁPASŮ)

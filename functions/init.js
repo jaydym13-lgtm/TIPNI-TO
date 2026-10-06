@@ -28,6 +28,7 @@ const admin = {
 const DEFAULT_SEASON_ID = "2026_2027";
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || "tipni-to-data";
 const RENDER_BOT_URL = process.env.RENDER_BOT_URL || "https://tipni-to-bot.onrender.com";
+const BOT_SECRET = process.env.BOT_SECRET || "";
 
 module.exports = {
     db,
@@ -38,5 +39,6 @@ module.exports = {
     tasksClient,
     DEFAULT_SEASON_ID,
     R2_BUCKET_NAME,
-    RENDER_BOT_URL
+    RENDER_BOT_URL,
+    BOT_SECRET
 };

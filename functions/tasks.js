@@ -3,7 +3,7 @@
 // =========================================================================
 
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
-const { db, tasksClient, DEFAULT_SEASON_ID, RENDER_BOT_URL } = require("./init");
+const { db, tasksClient, DEFAULT_SEASON_ID, RENDER_BOT_URL, BOT_SECRET } = require("./init");
 const { S3Client, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getMessaging } = require("firebase-admin/messaging");
 
@@ -28,7 +28,7 @@ async function naplanujBudikProKickoff(kickoffMs) {
         httpMethod: "POST",
         url: url,
         headers: { "Content-Type": "application/json" },
-        body: Buffer.from(JSON.stringify({ kickoffMs })).toString("base64")
+        body: Buffer.from(JSON.stringify({ kickoffMs, secret: BOT_SECRET })).toString("base64")
       },
       scheduleTime: {
         seconds: Math.floor(targetNotifMs / 1000)
@@ -56,7 +56,7 @@ async function naplanujBudikProKickoff(kickoffMs) {
         httpMethod: "POST",
         url: url,
         headers: { "Content-Type": "application/json" },
-        body: Buffer.from(JSON.stringify({ kickoffMs, iteration: 0 })).toString("base64")
+        body: Buffer.from(JSON.stringify({ kickoffMs, iteration: 0, secret: BOT_SECRET })).toString("base64")
       },
       scheduleTime: {
         seconds: Math.floor(targetWakeupMs / 1000)
@@ -140,6 +140,11 @@ const preMatchExecutionTask = onRequest({
   invoker: "public",
   secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
 }, async (req, res) => {
+  // 🔒 KONTROLA BEZPEČNOSTNÍHO TOKENU
+  if (BOT_SECRET && req.body?.secret !== BOT_SECRET) {
+    res.status(401).send("Unauthorized");
+    return;
+  }
   const kickoffMs = req.body?.kickoffMs;
   console.log(`🔔 EXEKUCE T-62: Zahajuji kontrolu a odesílání notifikací před výkopem v ${new Date(kickoffMs).toLocaleTimeString("cs-CZ")}...`);
 
@@ -337,13 +342,22 @@ const botWakeupAndKeepAliveTask = onRequest({
   invoker: "public",
   secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
 }, async (req, res) => {
+  // 🔒 KONTROLA BEZPEČNOSTNÍHO TOKENU
+  if (BOT_SECRET && req.body?.secret !== BOT_SECRET) {
+    res.status(401).send("Unauthorized");
+    return;
+  }
+
   const { kickoffMs, iteration = 0 } = req.body || {};
   console.log(`💓 KEEP-ALIVE: Úkol bota aktivován (iterace ${iteration}) v ${new Date().toLocaleTimeString("cs-CZ")}`);
 
   // 1. HTTP ping na Render /cron pro probuzení nebo reset 15min spánkového časovače
   try {
     const pingUrl = `${RENDER_BOT_URL.replace(/\/+$/, "")}/cron`;
-    await fetch(pingUrl, { signal: AbortSignal.timeout(12000) });
+    await fetch(pingUrl, { 
+      headers: { "x-bot-secret": BOT_SECRET },
+      signal: AbortSignal.timeout(12000) 
+    });
     console.log("📡 RENDER PING: Signál /cron úspěšně doručen.");
   } catch (e) {
     console.warn("⚠️ RENDER PING nedokončen (bot se pravděpodobně studeně probouzí):", e.message);
@@ -412,7 +426,7 @@ async function naplanujDalsiKeepAlivePing(nextIteration) {
       httpMethod: "POST",
       url: url,
       headers: { "Content-Type": "application/json" },
-      body: Buffer.from(JSON.stringify({ iteration: nextIteration })).toString("base64")
+      body: Buffer.from(JSON.stringify({ iteration: nextIteration, secret: BOT_SECRET })).toString("base64")
     },
     scheduleTime: {
       seconds: Math.floor(targetMs / 1000)
@@ -489,6 +503,13 @@ const rescheduleBudikyManual = onRequest({
   invoker: "public",
   secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
 }, async (req, res) => {
+  // 🔒 AUTORIZACE: Přístup povolen pouze se správným klíčem (?key=... nebo hlavička)
+  const incomingKey = req.query?.key || req.headers?.["x-bot-secret"];
+  if (BOT_SECRET && incomingKey !== BOT_SECRET) {
+    res.status(401).send("Unauthorized: Chybějící nebo neplatný bezpečnostní klíč.");
+    return;
+  }
+
   console.log("🔄 RUČNÍ RE-PLAN (R2): Spouštím audit zápasů a plánování budíků z R2...");
   try {
     const { uniqueKickoffs, pocetLiveZapasu } = await naplanujBudikyZR2();

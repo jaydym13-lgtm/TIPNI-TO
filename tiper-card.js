@@ -1,5 +1,5 @@
 // =========================================================================
-// 🃏 TIPNI TO! - FUT-STYLE HRÁČSKÉ KARTY & 3D EXPORT ENGINE (fut-card.js)
+// 🃏 TIPNI TO! - HRÁČSKÉ KARTY & 3D EXPORT ENGINE
 // =========================================================================
 
 import { CONFIG } from "./config.js";
@@ -22,7 +22,7 @@ window.openPlayerProfile = (targetUid, targetLeague = undefined) => {
 };
 
 window.flipCard3D = () => {
-    const cardObj = document.getElementById('futCardObject');
+    const cardObj = document.getElementById('tiperCardObject');
     if (cardObj) {
         cardObj.classList.toggle('is-flipped');
     }
@@ -73,10 +73,10 @@ window.renderPlayerProfile = (targetUid, leagueFilter = undefined) => {
                 : (lb.zebricek || lb.zebricekLive || []);
 
             const p = list.find(x => x.uid === uid);
-            if (p && p.futCard) {
+            if (p && p.tiperCard) {
                 const odehranoZapasu = (p.natipovaneVyhodnocene || p.natipovaneVyhodnoceneLive || 0) + (p.nenatipovaneVyhodnocene || p.nenatipovaneVyhodnoceneLive || 0);
                 if (odehranoZapasu > 0) {
-                    cardsByLeague[lName] = p.futCard;
+                    cardsByLeague[lName] = p.tiperCard;
                 }
                 if (!playerNickname && p.nickname) playerNickname = p.nickname;
             }
@@ -192,7 +192,7 @@ window.renderPlayerProfile = (targetUid, leagueFilter = undefined) => {
 
     const cardNickFontSize = vypocitejPismoKarty(playerNickname);
 
-    window.activeFUTCardExport = {
+    window.activeTiperCardExport = {
         card: activeCard,
         nickname: playerNickname,
         crestUrl: crestUrl,
@@ -204,77 +204,77 @@ window.renderPlayerProfile = (targetUid, leagueFilter = undefined) => {
         }
     };
 
-    window.__cardWasFlippedBeforeRender = Boolean(document.getElementById('futCardObject')?.classList.contains('is-flipped'));
+    window.__cardWasFlippedBeforeRender = Boolean(document.getElementById('tiperCardObject')?.classList.contains('is-flipped'));
 
     container.innerHTML = `
-        <div class="fut-card-perspective">
-            <div class="fut-card-object" id="futCardObject" onclick="window.flipCard3D()">
-                <div class="fut-card-face card-front tier-${activeCard.tier}">
-                    <div class="fut-front-header">
-                        <div class="fut-ovr-group">
-                            <span class="fut-ovr-value">${activeCard.ovr}</span>
-                            <span class="fut-archetype-tag">${activeCard.archetype}</span>
+        <div class="tiper-card-perspective">
+            <div class="tiper-card-object" id="tiperCardObject" onclick="window.flipCard3D()">
+                <div class="tiper-card-face card-front tier-${activeCard.tier}">
+                    <div class="tiper-front-header">
+                        <div class="tiper-ovr-group">
+                            <span class="tiper-ovr-value">${activeCard.ovr}</span>
+                            <span class="tiper-archetype-tag">${activeCard.archetype}</span>
                         </div>
-                        ${crestUrl ? `<img src="${crestUrl}" class="fut-league-crest" alt="Crest">` : '<div style="width:38px;height:38px;"></div>'}
+                        ${crestUrl ? `<img src="${crestUrl}" class="tiper-league-crest" alt="Crest">` : '<div style="width:38px;height:38px;"></div>'}
                     </div>
 
-                    <div class="fut-player-info">
-                        <div class="fut-player-name" style="font-size: ${cardNickFontSize};">${window.escapeHTML(playerNickname)}</div>
-                        <div class="fut-archetype-name">${activeCard.specialization ? activeCard.specialization : activeCard.archetypeName}</div>
+                    <div class="tiper-player-info">
+                        <div class="tiper-player-name" style="font-size: ${cardNickFontSize};">${window.escapeHTML(playerNickname)}</div>
+                        <div class="tiper-archetype-name">${activeCard.specialization ? activeCard.specialization : activeCard.archetypeName}</div>
                     </div>
 
-                    <div class="fut-stats-matrix">
-                        <div class="fut-stat-cell"><span class="fut-stat-num">${activeCard.stats?.pre ?? 60}</span><span class="fut-stat-label">PŘESNOST</span></div>
-                        <div class="fut-stat-cell"><span class="fut-stat-num">${activeCard.stats?.odv ?? 60}</span><span class="fut-stat-label">ODVAHA</span></div>
-                        <div class="fut-stat-cell"><span class="fut-stat-num">${activeCard.stats?.clu ?? 60}</span><span class="fut-stat-label">PSYCHIKA</span></div>
-                        <div class="fut-stat-cell"><span class="fut-stat-num">${activeCard.stats?.sta ?? 60}</span><span class="fut-stat-label">STABILITA</span></div>
-                        <div class="fut-stat-cell"><span class="fut-stat-num">${activeCard.stats?.for ?? 60}</span><span class="fut-stat-label">FORMA</span></div>
-                        <div class="fut-stat-cell"><span class="fut-stat-num">${activeCard.stats?.efe ?? 60}</span><span class="fut-stat-label">EFEKTIVITA</span></div>
+                    <div class="tiper-stats-matrix">
+                        <div class="tiper-stat-cell"><span class="tiper-stat-num">${activeCard.stats?.pre ?? 60}</span><span class="tiper-stat-label">PŘESNOST</span></div>
+                        <div class="tiper-stat-cell"><span class="tiper-stat-num">${activeCard.stats?.odv ?? 60}</span><span class="tiper-stat-label">ODVAHA</span></div>
+                        <div class="tiper-stat-cell"><span class="tiper-stat-num">${activeCard.stats?.clu ?? 60}</span><span class="tiper-stat-label">PSYCHIKA</span></div>
+                        <div class="tiper-stat-cell"><span class="tiper-stat-num">${activeCard.stats?.sta ?? 60}</span><span class="tiper-stat-label">STABILITA</span></div>
+                        <div class="tiper-stat-cell"><span class="tiper-stat-num">${activeCard.stats?.for ?? 60}</span><span class="tiper-stat-label">FORMA</span></div>
+                        <div class="tiper-stat-cell"><span class="tiper-stat-num">${activeCard.stats?.efe ?? 60}</span><span class="tiper-stat-label">EFEKTIVITA</span></div>
                     </div>
 
-                    <div class="fut-badges-footer">
-                        <div class="fut-badge-item ${badgeExacts > 0 ? '' : 'is-empty'}">
-                            <span class="fut-badge-icon">🎯</span>
-                            <span class="fut-badge-count">${badgeExacts}×</span>
-                            <span class="fut-badge-label">PŘESNÉ</span>
+                    <div class="tiper-badges-footer">
+                        <div class="tiper-badge-item ${badgeExacts > 0 ? '' : 'is-empty'}">
+                            <span class="tiper-badge-icon">🎯</span>
+                            <span class="tiper-badge-count">${badgeExacts}×</span>
+                            <span class="tiper-badge-label">PŘESNÉ</span>
                         </div>
-                        <div class="fut-badge-item ${badgeStreaks > 0 ? '' : 'is-empty'}">
-                            <span class="fut-badge-icon">🚀</span>
-                            <span class="fut-badge-count">${badgeStreaks}</span>
-                            <span class="fut-badge-label">SÉRIE</span>
+                        <div class="tiper-badge-item ${badgeStreaks > 0 ? '' : 'is-empty'}">
+                            <span class="tiper-badge-icon">🚀</span>
+                            <span class="tiper-badge-count">${badgeStreaks}</span>
+                            <span class="tiper-badge-label">SÉRIE</span>
                         </div>
-                        <div class="fut-badge-item ${badgeDraws > 0 ? '' : 'is-empty'}">
-                            <span class="fut-badge-icon">🤝</span>
-                            <span class="fut-badge-count">${badgeDraws}×</span>
-                            <span class="fut-badge-label">REMÍZY</span>
+                        <div class="tiper-badge-item ${badgeDraws > 0 ? '' : 'is-empty'}">
+                            <span class="tiper-badge-icon">🤝</span>
+                            <span class="tiper-badge-count">${badgeDraws}×</span>
+                            <span class="tiper-badge-label">REMÍZY</span>
                         </div>
-                        <div class="fut-badge-item ${badgeMaxRound > 0 ? '' : 'is-empty'}">
-                            <span class="fut-badge-icon">⚡</span>
-                            <span class="fut-badge-count">${badgeMaxRound} b.</span>
-                            <span class="fut-badge-label">REKORD</span>
+                        <div class="tiper-badge-item ${badgeMaxRound > 0 ? '' : 'is-empty'}">
+                            <span class="tiper-badge-icon">⚡</span>
+                            <span class="tiper-badge-count">${badgeMaxRound} b.</span>
+                            <span class="tiper-badge-label">REKORD</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="fut-card-face card-back tier-${activeCard.tier}">
-                    <div class="fut-back-wrapper">
-                        <div class="fut-back-title">DETAILNÍ ANALÝZA</div>
-                        <div class="fut-back-rows">
-                            <div class="fut-back-row">
-                                <span class="fut-back-lbl">Odehrané zápasy:</span>
-                                <span class="fut-back-val">${activeCard.backSide?.totalMatches ?? 0}</span>
+                <div class="tiper-card-face card-back tier-${activeCard.tier}">
+                    <div class="tiper-back-wrapper">
+                        <div class="tiper-back-title">DETAILNÍ ANALÝZA</div>
+                        <div class="tiper-back-rows">
+                            <div class="tiper-back-row">
+                                <span class="tiper-back-lbl">Odehrané zápasy:</span>
+                                <span class="tiper-back-val">${activeCard.backSide?.totalMatches ?? 0}</span>
                             </div>
-                            <div class="fut-back-row">
-                                <span class="fut-back-lbl">Průměrný zisk:</span>
-                                <span class="fut-back-val">${window.escapeHTML(activeCard.backSide?.avgRoundPts ?? '0.0 b.')} / kolo</span>
+                            <div class="tiper-back-row">
+                                <span class="tiper-back-lbl">Průměrný zisk:</span>
+                                <span class="tiper-back-val">${window.escapeHTML(activeCard.backSide?.avgRoundPts ?? '0.0 b.')} / kolo</span>
                             </div>
-                            <div class="fut-back-row">
-                                <span class="fut-back-lbl">Ligový percentil:</span>
-                                <span class="fut-back-val">${window.escapeHTML(activeCard.backSide?.percentile ?? '–')}</span>
+                            <div class="tiper-back-row">
+                                <span class="tiper-back-lbl">Ligový percentil:</span>
+                                <span class="tiper-back-val">${window.escapeHTML(activeCard.backSide?.percentile ?? '–')}</span>
                             </div>
-                            <div class="fut-back-row fut-back-row-tendency">
-                                <span class="fut-back-lbl">Preferovaná tendence:</span>
-                                <div class="fut-tendency-pills">
+                            <div class="tiper-back-row tiper-back-row-tendency">
+                                <span class="tiper-back-lbl">Preferovaná tendence:</span>
+                                <div class="tiper-tendency-pills">
                                     ${(() => {
                                         const raw = activeCard.backSide?.favTendency || '';
                                         const m1 = raw.match(/1:\s*(\d+)\s*%/);
@@ -284,19 +284,19 @@ window.renderPlayerProfile = (targetUid, leagueFilter = undefined) => {
                                         const vX = mX ? `${mX[1]} %` : '–';
                                         const v2 = m2 ? `${m2[1]} %` : '–';
                                         return `
-                                            <div class="fut-pill-item"><span class="fut-pill-lbl">1</span><span class="fut-pill-val">${v1}</span></div>
-                                            <div class="fut-pill-item"><span class="fut-pill-lbl">X</span><span class="fut-pill-val">${vX}</span></div>
-                                            <div class="fut-pill-item"><span class="fut-pill-lbl">2</span><span class="fut-pill-val">${v2}</span></div>
+                                            <div class="tiper-pill-item"><span class="tiper-pill-lbl">1</span><span class="tiper-pill-val">${v1}</span></div>
+                                            <div class="tiper-pill-item"><span class="tiper-pill-lbl">X</span><span class="tiper-pill-val">${vX}</span></div>
+                                            <div class="tiper-pill-item"><span class="tiper-pill-lbl">2</span><span class="tiper-pill-val">${v2}</span></div>
                                         `;
                                     })()}
                                 </div>
                             </div>
-                            <div class="fut-back-row fut-back-row-style">
-                                <div class="fut-style-header">
-                                    <span class="fut-back-lbl">Herní styl:</span>
-                                    <span class="fut-back-val">${activeCard.archetypeName} (${activeCard.archetype})</span>
+                            <div class="tiper-back-row tiper-back-row-style">
+                                <div class="tiper-style-header">
+                                    <span class="tiper-back-lbl">Herní styl:</span>
+                                    <span class="tiper-back-val">${activeCard.archetypeName} (${activeCard.archetype})</span>
                                 </div>
-                                <div class="fut-style-desc">
+                                <div class="tiper-style-desc">
                                     ${(() => {
                                         const descs = {
                                             'STR': 'Pragmatický styl. Volí přímočaré tipy s cílem vytěžit body a vyhýbá se zbytečným experimentům.',
@@ -311,7 +311,7 @@ window.renderPlayerProfile = (targetUid, leagueFilter = undefined) => {
                                 </div>
                             </div>
                         </div>
-                        <div class="fut-back-hint">🔄 Klepnutím otočíš kartu zpět</div>
+                        <div class="tiper-back-hint">🔄 Klepnutím otočíš kartu zpět</div>
                     </div>
                 </div>
             </div>
@@ -319,19 +319,19 @@ window.renderPlayerProfile = (targetUid, leagueFilter = undefined) => {
     `;
 
     if (typeof window.__cardWasFlippedBeforeRender !== 'undefined' && window.__cardWasFlippedBeforeRender) {
-        const cardObj = document.getElementById('futCardObject');
+        const cardObj = document.getElementById('tiperCardObject');
         if (cardObj) cardObj.classList.add('is-flipped');
     }
 };
 
 window.sharePlayerCard = async (event) => {
-    const data = window.activeFUTCardExport;
+    const data = window.activeTiperCardExport;
     if (!data || !data.card) {
         window.showToast("Karta není připravena ke sdílení.", true);
         return;
     }
 
-    const shareBtn = event?.target?.closest('button') || document.querySelector('#profileScreen button[onclick*="sharePlayerCard"]') || document.querySelector('.fut-share-btn');
+    const shareBtn = event?.target?.closest('button') || document.querySelector('#profileScreen button[onclick*="sharePlayerCard"]') || document.querySelector('.tiper-share-btn');
     const originalText = shareBtn ? shareBtn.innerText : '📸 SDÍLET KARTU (ULOŽIT)';
 
     if (shareBtn) {
@@ -703,7 +703,7 @@ window.sharePlayerCard = async (event) => {
                     window.showToast("Chyba při exportu karty.", true);
                     return;
                 }
-                const filename = `${nick.replace(/[^a-zA-Z0-9]/g, '_')}_FUT_karta.png`;
+                const filename = `${nick.replace(/[^a-zA-Z0-9]/g, '_')}_Karta_tipera.png`;
                 const file = new File([blob], filename, { type: 'image/png' });
 
                 const stahniJakoSoubor = () => {
@@ -712,7 +712,7 @@ window.sharePlayerCard = async (event) => {
                     a.download = filename;
                     a.click();
                     URL.revokeObjectURL(a.href);
-                    window.showToast("📸 Karta hráče stažena do počítače!");
+                    window.showToast("📸 Karta tipéra stažena do počítače!");
                 };
 
                 const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -720,7 +720,7 @@ window.sharePlayerCard = async (event) => {
                 if (isMobileDevice && navigator.canShare && navigator.canShare({ files: [file] })) {
                     try {
                         await navigator.share({
-                            title: `TIPNI TO! – Karta hráče ${nick}`,
+                            title: `TIPNI TO! – Karta tipéra ${nick}`,
                             files: [file]
                         });
                         return;

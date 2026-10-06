@@ -3,7 +3,13 @@
 // =========================================================================
 
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { RENDER_BOT_URL } = require("./init");
+const { RENDER_BOT_URL, BOT_SECRET } = require("./init");
+
+// 🔒 AUTOMATICKÁ AUTORIZACE: Přibalí tajný token x-bot-secret ke každému volání bota
+const fetch = (url, opts = {}) => globalThis.fetch(url, {
+  ...opts,
+  headers: { ...(opts?.headers || {}), "x-bot-secret": BOT_SECRET }
+});
 const { naplanujBudikyZR2 } = require("./tasks");
 
 // 📅 KALENDÁŘNÍ RADAR: Denní kontrola ve 12:00 (0 FIRESTORE READS)

@@ -30,7 +30,7 @@
     <script type="module" src="app.js"></script>
     <script type="module" src="ui.js"></script>
     <script type="module" src="render.js"></script>
-    <script type="module" src="fut-card.js"></script>
+    <script type="module" src="tiper-card.js"></script>
     <script type="module" src="cup.js"></script>
     <script type="module" src="h2h.js"></script>
     <script type="module" src="leaderboard.js"></script>
@@ -1328,23 +1328,23 @@
         </div>
     </div>
 
-    <!-- 🃏 PROFILE SCREEN (FUT KARTA HRÁČE) -->
+    <!-- 🃏 PROFILE SCREEN (KARTA TIPÉRA) -->
     <div id="profileScreen" class="screen-scroll league-themed-screen" x-show="$store.appState?.currentScreen === 'profileScreen'" x-cloak>
         <div class="app-container app-container-padding">
-            <!-- 🎛️ PŘEPÍNAČ POHLEDU: KARTA HRÁČE vs. HISTORIE HRÁČE -->
+            <!-- 🎛️ PŘEPÍNAČ POHLEDU: KARTA TIPÉRA vs. HISTORIE HRÁČE -->
             <div class="leaderboard-subtabs-wrapper" style="margin-bottom: 12px; justify-content: center; gap: 8px;">
                 <button class="nav-subbtn-leaderboard is-active" style="flex: 1; max-width: 170px; height: 38px; font-size: 0.82rem;">
-                    🃏 KARTA HRÁČE
+                    🃏 KARTA TIPÉRA
                 </button>
                 <button class="nav-subbtn-leaderboard" style="flex: 1; max-width: 170px; height: 38px; font-size: 0.82rem;" onclick="window.showToast('Na historii hráče se usilovně pracuje ⏳')">
                     📜 HISTORIE HRÁČE
                 </button>
             </div>
 
-            <!-- 🎛️ KARUSEL SOUTĚŽÍ PRO KARTU HRÁČE -->
+            <!-- 🎛 KARUSEL SOUTĚŽÍ PRO KARTU HRÁČE -->
             <div id="profileLeagueCarousel" style="margin-bottom: 16px;"></div>
 
-            <!-- 3D FUT Karta (Líc / Rub) -->
+            <!-- 3D Karta tipéra (Líc / Rub) -->
             <div id="profileCardContainer" style="display: flex; justify-content: center; width: 100%; box-sizing: border-box;"></div>
 
             <!-- Akční tlačítka pod kartou -->

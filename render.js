@@ -357,7 +357,8 @@ window.urciBarvuATriduBodu = (tDom, tHos, rDom, rHos, league, tPostup, rPostup, 
         };
     }
 
-    const pts = window.vypocitejBodyZapasu(tDom, tHos, rDom, rHos, league, tPostup, rPostup, isPlayoff, isTopMatch);
+    const efektivniPostup = (rPostup && rPostup !== 'null' && rPostup !== 'undefined') ? rPostup : '';
+    const pts = window.vypocitejBodyZapasu(tDom, tHos, rDom, rHos, league, tPostup, efektivniPostup, isPlayoff, isTopMatch);
     const dVal = parseInt(tDom);
     const hVal = parseInt(tHos);
     const rdVal = parseInt(rDom);

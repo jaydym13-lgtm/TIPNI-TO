@@ -4,7 +4,7 @@
 // =========================================================================
 
 // 🏷️ JEDINÉ CENTRÁLNÍ MÍSTO PRAVDY PRO VERZI APLIKACE
-const APP_VERSION = 'v1.2.6';
+const APP_VERSION = 'v1.2.7';
 const CACHE_NAME = `tipnito-core-${APP_VERSION}`;
 
 // Statické a neměnné assety (Písma, ikony, externí knihovny z CDN)
@@ -36,7 +36,7 @@ const APP_CODE_ASSETS = [
     '/render.js',
     '/admin.js',
     '/excelExport.js',
-    '/fut-card.js',
+    '/tiper-card.js',
     '/cup.js',
     '/h2h.js',
     '/leaderboard.js',

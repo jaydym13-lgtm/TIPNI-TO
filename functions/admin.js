@@ -362,13 +362,14 @@ async function spustVnitrniPrepocetLigy(leagueName, sezonaId, matchIdsProSpyDelt
       if (jeLiveNeboVyhodnoceny) {
         let bodyZapasuLive = 0;
         if (uživatelůvTip) {
-          bodyZapasuLive = vypocitejBodyZapasuLocal(uživatelůvTip.tip_domaci, uživatelůvTip.tip_hoste, vDomaci, vHoste, uživatelůvTip.postup, zapas.postup, zapas.isPlayoff, zapas.isTopMatch);
+          const realnyPostupLive = (zapas.apiStatus === "FINISHED") ? (zapas.postup || "") : "";
+          bodyZapasuLive = vypocitejBodyZapasuLocal(uživatelůvTip.tip_domaci, uživatelůvTip.tip_hoste, vDomaci, vHoste, uživatelůvTip.postup, realnyPostupLive, zapas.isPlayoff, zapas.isTopMatch);
           hracStats[email].celkemBoduLive += bodyZapasuLive; hracStats[email].natipovaneVyhodnoceneLive++;
           
           const tD = parseInt(uživatelůvTip.tip_domaci); const tH = parseInt(uživatelůvTip.tip_hoste);
           const rDLive = parseInt(vDomaci); const rHLive = parseInt(vHoste);
 
-          const jePresnyLive = (tD === rDLive && tH === rHLive && (!zapas.isPlayoff || rDLive !== rHLive || uživatelůvTip.postup === zapas.postup));
+          const jePresnyLive = (tD === rDLive && tH === rHLive && (!zapas.isPlayoff || rDLive !== rHLive || uživatelůvTip.postup === realnyPostupLive));
           const jeTendenceLive = (tD > tH && rDLive > rHLive) || (tD < tH && rDLive < rHLive) || (tD === tH && rDLive === rHLive);
 
           if (jePresnyLive) {
@@ -1039,6 +1040,7 @@ async function spustVnitrniPrepocetLigy(leagueName, sezonaId, matchIdsProSpyDelt
     }
 
     kolaSouhrn[klicKola] = {
+      isFinished: dohranaKolaSet.has(klicKola),
       hracKola: hraciKolaObj,
       topMatch: topMatchObj,
       nejvicPresnych: nejvicPresnychObj,
@@ -1110,7 +1112,7 @@ async function spustVnitrniPrepocetLigy(leagueName, sezonaId, matchIdsProSpyDelt
     return count > 0 ? (sum / count) : 0;
   };
 
-  const spoctiFUTKartu = (email, isLiveMode = false) => {
+  const spoctiTiperKartu = (email, isLiveMode = false) => {
     const stats = hracStats[email] || {};
     const uTips = stats.mapaTipuLocal || {};
     const odehrano = isLiveMode ? (stats.natipovaneVyhodnoceneLive || 0) : (stats.natipovaneVyhodnocene || 0);
@@ -1377,10 +1379,10 @@ async function spustVnitrniPrepocetLigy(leagueName, sezonaId, matchIdsProSpyDelt
   };
 
   zebricekPole.forEach(p => {
-    p.futCard = spoctiFUTKartu(p.email, false);
+    p.tiperCard = spoctiTiperKartu(p.email, false);
   });
   zebricekLivePole.forEach(p => {
-    p.futCard = spoctiFUTKartu(p.email, true);
+    p.tiperCard = spoctiTiperKartu(p.email, true);
   });
 
   const leaderboardJson = {
@@ -1516,7 +1518,7 @@ async function spustVnitrniPrepocetLigy(leagueName, sezonaId, matchIdsProSpyDelt
 
       if (lb && lb.zebricek) {
         lb.zebricek.forEach(p => {
-          if (!p.uid || !p.futCard) return;
+          if (!p.uid || !p.tiperCard) return;
           const odehrano = (p.natipovaneVyhodnocene || 0) + (p.nenatipovaneVyhodnocene || 0);
           if (odehrano === 0) return;
 
@@ -1529,7 +1531,7 @@ async function spustVnitrniPrepocetLigy(leagueName, sezonaId, matchIdsProSpyDelt
           }
           playersMap[p.uid].leaguesCards.push({
             leagueName: lName,
-            futCard: p.futCard
+            tiperCard: p.tiperCard
           });
         });
       }
@@ -1537,7 +1539,7 @@ async function spustVnitrniPrepocetLigy(leagueName, sezonaId, matchIdsProSpyDelt
 
     const playersList = Object.values(playersMap).map(p => {
       const count = p.leaguesCards.length;
-      const sumOvr = p.leaguesCards.reduce((acc, c) => acc + (c.futCard.ovr || 0), 0);
+      const sumOvr = p.leaguesCards.reduce((acc, c) => acc + (c.tiperCard.ovr || 0), 0);
       const rawAvg = sumOvr / count;
 
       let koef = 1.0;
@@ -1556,27 +1558,27 @@ async function spustVnitrniPrepocetLigy(leagueName, sezonaId, matchIdsProSpyDelt
       let sumAvgPts = 0;
 
       p.leaguesCards.forEach(c => {
-        const fc = c.futCard;
-        if ((fc.ovr || 0) > maxOvr) {
-          maxOvr = fc.ovr;
+        const tc = c.tiperCard;
+        if ((tc.ovr || 0) > maxOvr) {
+          maxOvr = tc.ovr;
           bestLeague = c.leagueName;
         }
-        sumPre += (fc.stats?.pre || 60);
-        sumOdv += (fc.stats?.odv || 60);
-        sumClu += (fc.stats?.clu || 60);
-        sumSta += (fc.stats?.sta || 60);
-        sumFor += (fc.stats?.for || 60);
-        sumEfe += (fc.stats?.efe || 60);
+        sumPre += (tc.stats?.pre || 60);
+        sumOdv += (tc.stats?.odv || 60);
+        sumClu += (tc.stats?.clu || 60);
+        sumSta += (tc.stats?.sta || 60);
+        sumFor += (tc.stats?.for || 60);
+        sumEfe += (tc.stats?.efe || 60);
 
-        if ((fc.badges?.streaks || 0) > maxStreak) maxStreak = fc.badges.streaks;
-        sumExacts += (fc.badges?.exacts || 0);
-        sumDraws += (fc.badges?.draws || 0);
-        if ((fc.badges?.maxRound || 0) > maxRound) maxRound = fc.badges.maxRound;
-        sumMatches += (fc.backSide?.totalMatches || 0);
-        sumAvgPts += parseFloat(fc.backSide?.avgRoundPts || 0) || 0;
+        if ((tc.badges?.streaks || 0) > maxStreak) maxStreak = tc.badges.streaks;
+        sumExacts += (tc.badges?.exacts || 0);
+        sumDraws += (tc.badges?.draws || 0);
+        if ((tc.badges?.maxRound || 0) > maxRound) maxRound = tc.badges.maxRound;
+        sumMatches += (tc.backSide?.totalMatches || 0);
+        sumAvgPts += parseFloat(tc.backSide?.avgRoundPts || 0) || 0;
       });
 
-      const bestCard = p.leaguesCards.find(c => c.leagueName === bestLeague)?.futCard || p.leaguesCards[0].futCard;
+      const bestCard = p.leaguesCards.find(c => c.leagueName === bestLeague)?.tiperCard || p.leaguesCards[0].tiperCard;
 
       let tier = 'bronze';
       if (masterOvr >= 90) tier = 'elite';
@@ -1637,17 +1639,17 @@ async function spustVnitrniPrepocetLigy(leagueName, sezonaId, matchIdsProSpyDelt
       if (lb && lb.zebricek) {
         const leaguePlayers = [];
         lb.zebricek.forEach(p => {
-          if (!p.uid || !p.futCard) return;
+          if (!p.uid || !p.tiperCard) return;
           const odehrano = (p.natipovaneVyhodnocene || 0) + (p.nenatipovaneVyhodnocene || 0);
           if (odehrano === 0) return;
 
           leaguePlayers.push({
             uid: p.uid,
             nickname: p.nickname || 'Hráč',
-            ovr: p.futCard.ovr || 60,
-            tier: p.futCard.tier || 'bronze',
-            archetype: p.futCard.archetype || 'TAK',
-            archetypeName: p.futCard.archetypeName || 'Taktik',
+            ovr: p.tiperCard.ovr || 60,
+            tier: p.tiperCard.tier || 'bronze',
+            archetype: p.tiperCard.archetype || 'TAK',
+            archetypeName: p.tiperCard.archetypeName || 'Taktik',
             points: p.celkemBodu || 0,
             matches: odehrano
           });

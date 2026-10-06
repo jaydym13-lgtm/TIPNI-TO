@@ -20,13 +20,13 @@
 
 * **Multi-ligové tipování:** Podpora fotbalu i hokeje (Chance Liga, Premier League, Tipsport Extraliga, Liga mistrů, MS v hokeji a MS ve fotbale) s odlišnými pravidly bodování (přesné výsledky, tendence, penalty za nenatipování i bonusy na postup v prodloužení/nájezdech).
 * **Živé výsledky a Špehovací oko:** Tipy všech hráčů jsou až do začátku zápasu skryté pod zámkem. Jakmile utkání odstartuje, zámek se změní na oko, tipy soupeřů se odemknou a aplikace v reálném čase počítá průběžné body i virtuální pořadí v tabulce.
-* **3D FUT Karty tipérů:** Na základě reálné úspěšnosti předpovědí systém počítá hráči celkový OVR rating (1–99), 6 atributů (přesnost, odvaha, psychika ve šlágrech, stabilita, forma, efektivita) a přiřadí herní styl (*Odstřelovač, Taktik, Predátor...*). Karta nabízí 3D otočení se statistikami a možnost exportu grafického štítku do obrázku.
+* **3D Karty tipérů:** Na základě reálné úspěšnosti předpovědí systém počítá hráči celkový OVR rating (1–99), 6 atributů (přesnost, odvaha, psychika ve šlágrech, stabilita, forma, efektivita) a přiřadí herní styl (*Odstřelovač, Taktik, Predátor...*). Karta nabízí 3D otočení se statistikami a možnost exportu grafického štítku do obrázku.
 * **H2H Duel Aréna:** Přímé porovnání dvou libovolných hráčů ze žebříčku. Srovnává vzájemnou bilanci vyhraných kol, formu z posledních utkání, shodu tipů i odlišné předpovědi v nadcházejících zápasech.
 * **Pohár (Tipni Cup):** Paralelní vyřazovací turnaj navázaný na běžné ligové tipy. Hráči jsou po úvodních kolech rozděleni Hadím draftem do čtyř skupin a nejlepší postupují do pavouka na dvoukolové odvety.
 * **Ligový Radar:** Automatická analýza extrémů sezóny – bodově nejbohatší zápas kola (Zlatý důl), zápasy s nulovým ziskem pro celou soutěž (Totální výbuch), ojedinělé trefy jediného hráče proti všem (Vlci samotáři) i statistika úspěšnosti tipů na jednotlivé kluby.
 * **PWA a ochrana formulářů:** Aplikaci lze nainstalovat na plochu mobilu (Android i iOS) pro běh na celou obrazovku bez lišt prohlížeče. Formulářový interceptor navíc hlídá rozepsané tipy a zabrání jejich nechtěnému zahození při překliku nebo gestu zpět.
 * **Admin modul „Loutkovodič“:** Praktická asistence pro správce ligy v reálném provozu – možnost v nouzi podat či upravit tip za kteréhokoliv hráče (např. když někteří lidé neumí nebo nechtějí používat aplikace v mobilu). Vše probíhá bezpečně přes autorizovanou Cloud Function bez manuálních zásahů do databáze.
-* **Export pro sociální sítě:** Generování čistých obrázkových snapshotů (PNG) přímo v prohlížeči pomocí HTML5 Canvas. Hráči si mohou jedním kliknutím stáhnout svou aktuální FUT kartu, administrátoři i ligovou tabulku a souhrn odehraného kola a okamžitě je nasdílet do komunitních skupin na Facebooku, WhatsAppu či Messengeru bez nutnosti dělat ořezy ze snímků obrazovky.
+* **Export pro sociální sítě:** Generování čistých obrázkových snapshotů (PNG) přímo v prohlížeči pomocí HTML5 Canvas. Hráči si mohou jedním kliknutím stáhnout svou aktuální kartu tipéra, administrátoři i ligovou tabulku a souhrn odehraného kola a okamžitě je nasdílet do komunitních skupin na Facebooku, WhatsAppu či Messengeru bez nutnosti dělat ořezy ze snímků obrazovky.
 
 ---
 
@@ -55,9 +55,9 @@
 | <img width="450" height="1000" alt="Screenshot_2026-09-30-07-23-53-747_com android chrome" src="https://github.com/user-attachments/assets/804a0273-0872-48d7-9a2c-a963b39375f4" /> | <img width="450" height="1000" alt="Screenshot_2026-09-30-07-24-08-564_com android chrome" src="https://github.com/user-attachments/assets/136140dd-d438-4d9a-ab6e-1b040716c303" /> |
 | *Přihlášení, Google účet a instalace PWA na plochu* | *Výběr soutěže (rozšířený fanouškovský režim s grafikou)* |
 
-| 🃏 3D FUT Karta tipéra | 🏆 Živé ligové pořadí |
+| 🃏 3D Karta tipéra | 🏆 Živé ligové pořadí |
 | :---: | :---: |
-| <img width="450" height="1000" alt="fut karta" src="https://github.com/user-attachments/assets/75d49b79-f7dc-46c9-b972-9326d05cdf13" /> | <img width="450" height="1000" alt="live" src="https://github.com/user-attachments/assets/718ae931-bcef-4351-bafd-98fdca3300ba" /> |
+| <img width="450" height="1000" alt="Karta tipéra" src="https://github.com/user-attachments/assets/75d49b79-f7dc-46c9-b972-9326d05cdf13" /> | <img width="450" height="1000" alt="live" src="https://github.com/user-attachments/assets/718ae931-bcef-4351-bafd-98fdca3300ba" /> |
 | *OVR rating, atributy a herní styl* | *Průběžný LIVE přepočet během hry* |
 
 | ⚔️️ H2H Duel 1 na 1 | 🌳 Pohár (Tipni Cup) |

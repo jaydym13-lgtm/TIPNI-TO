@@ -555,8 +555,8 @@ window.vykresliDataZebříčku = (centralDoc, contentArea, tab, leagueName) => {
                 <button onclick="window.showPlayerTipsModal('${stats.uid}', '${leagueName}')" class="leaderboard-spy-btn">
                     👁️ PROHLÉDNOUT TIPY HRÁČE
                 </button>
-                <button onclick="window.openPlayerProfile('${stats.uid}')" class="leaderboard-fut-btn">
-                    🃏 KARTA HRÁČE
+                <button onclick="window.openPlayerProfile('${stats.uid}')" class="leaderboard-tiper-btn">
+                    🃏 KARTA TIPÉRA
                 </button>
             ${!isMe ? `
                 <button onclick="window.showH2HModal('${stats.uid}')" class="leaderboard-h2h-btn">
@@ -1678,6 +1678,8 @@ window.showPlayerTipsModal = async (playerUid, leagueName) => {
     const kolaMap = {};
     const roundTotalMatchesMap = {};
 
+    const isLiveMode = (window.leaderboardActiveTab === 'live');
+
     serazeneZapasy.forEach(zap => {
         const koloNazev = window.prelozFaziTurnaje(zap.stage, zap.kolo, zap.isPlayoff) || '1. Kolo';
         roundTotalMatchesMap[koloNazev] = (roundTotalMatchesMap[koloNazev] || 0) + 1;
@@ -1685,7 +1687,12 @@ window.showPlayerTipsModal = async (playerUid, leagueName) => {
         const isEvaluated = (zap.vysledek_domaci !== undefined && zap.vysledek_hoste !== undefined && zap.apiStatus !== "IN_PLAY" && zap.apiStatus !== "PAUSED");
         const jeBeziciLive = (zap.apiStatus === "IN_PLAY" || zap.apiStatus === "PAUSED");
 
-        if (!isEvaluated && !jeBeziciLive) return;
+        // 🛡️ V běžném režimu (ne-LIVE) zobrazujeme POUZE oficiálně vyhodnocené zápasy
+        if (isLiveMode) {
+            if (!isEvaluated && !jeBeziciLive) return;
+        } else {
+            if (!isEvaluated) return;
+        }
 
         if (!kolaMap[koloNazev]) kolaMap[koloNazev] = [];
         kolaMap[koloNazev].push(zap);
@@ -1705,7 +1712,8 @@ window.showPlayerTipsModal = async (playerUid, leagueName) => {
         kolaMap,
         roundTotalMatchesMap,
         unikatniKola,
-        currentRoundIndex: unikatniKola.length - 1
+        currentRoundIndex: unikatniKola.length - 1,
+        isLiveMode: isLiveMode
     };
 
     window.renderPlayerTipsModalContent();
@@ -1749,7 +1757,7 @@ window.renderPlayerTipsModalContent = () => {
             tipStr = window.formatujZobrazeneSkore(t.tip_domaci, t.tip_hoste, t.postup, state.leagueName, zap.isPlayoff);
             tipColor = '#ffffff';
 
-            if (isEvaluated || jeBeziciLive) {
+            if (isEvaluated || (jeBeziciLive && state.isLiveMode)) {
                 const badgeInfo = window.urciBarvuATriduBodu(t.tip_domaci, t.tip_hoste, prubDomaci, prubHoste, state.leagueName, t.postup, zap.postup, zap.isPlayoff, zap.isTopMatch, true);
                 ptsStr = badgeInfo.ptsStr;
                 ptsColor = badgeInfo.color;
@@ -1757,7 +1765,7 @@ window.renderPlayerTipsModalContent = () => {
                 exactClass = badgeInfo.exactClass;
                 roundTotalPts += badgeInfo.pts;
             }
-        } else if (isEvaluated || jeBeziciLive) {
+        } else if (isEvaluated || (jeBeziciLive && state.isLiveMode)) {
             const badgeInfo = window.urciBarvuATriduBodu('', '', prubDomaci, prubHoste, state.leagueName, '', zap.postup, zap.isPlayoff, zap.isTopMatch, false);
             ptsStr = badgeInfo.ptsStr;
             ptsColor = badgeInfo.color;
@@ -1865,8 +1873,8 @@ window.renderPlayerTipsModalContent = () => {
             rowWinnerHtml = `
                 <div class="strip-item ${isMulti ? 'is-expandable' : ''}" ${isMulti ? 'onclick="window.toggleStripRow(this)"' : ''}>
                     <div class="strip-left">
-                        <span class="strip-icon">👑</span>
-                        <span class="strip-label">Hráč kola</span>
+                        <span class="strip-icon">${isFullyFinished ? '👑' : '⚡'}</span>
+                        <span class="strip-label">${isFullyFinished ? 'Hráč kola' : 'Průběžný lídr'}</span>
                     </div>
                     <div class="strip-right">
                         <span class="strip-val">${isMulti ? `${winnersArr.length} hráči (+${hk.points} b.)` : `${fullNamesHtml} (+${hk.points} b.)`}</span>
@@ -1956,9 +1964,10 @@ window.renderPlayerTipsModalContent = () => {
 
         const itemsCombined = [rowWinnerHtml, rowExactHtml, rowTopHtml, rowPerfektniHtml].filter(Boolean).join('');
         if (itemsCombined) {
+            const bannerTitle = isFullyFinished ? '📊 STATISTIKY KOLA' : '📊 STATISTIKY ROZEHRANÉHO KOLA';
             roundBannerHtml = `
                 <div class="player-modal-summary-section">
-                    <div class="player-modal-section-title">📊 STATISTIKY KOLA</div>
+                    <div class="player-modal-section-title">${bannerTitle}</div>
                     <div class="player-modal-card-strip">
                         ${itemsCombined}
                     </div>

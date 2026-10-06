@@ -13,6 +13,19 @@ const saveUserTipsCF = onCall({ cors: true }, async (request) => {
   }
 
   const uid = request.auth.uid;
+
+  // ⏱️ OCHRANA PROTI SPAMU & DENIAL OF WALLET (Rate-limit 3 sekundy přes RTDB)
+  const { getDatabase } = require("firebase-admin/database");
+  const rtdb = getDatabase();
+  const limitRef = rtdb.ref(`system/rate_limits/tips/${uid}`);
+  const limitSnap = await limitRef.get();
+  const lastCall = limitSnap.val() || 0;
+  const nowMs = Date.now();
+
+  if (nowMs - lastCall < 3000) {
+    throw new HttpsError("resource-exhausted", "Zpomal! Tipy lze odesílat maximálně jednou za 3 sekundy.");
+  }
+  await limitRef.set(nowMs);
   const email = request.auth.token.email || "";
   const { leagueName, tipyMapa } = request.data;
   const sezonaId = request.data.sezonaId || "2026_2027";

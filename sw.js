@@ -4,7 +4,7 @@
 // =========================================================================
 
 // 🏷️ JEDINÉ CENTRÁLNÍ MÍSTO PRAVDY PRO VERZI APLIKACE
-const APP_VERSION = 'v1.2.8';
+const APP_VERSION = 'v1.2.9';
 const CACHE_NAME = `tipnito-core-${APP_VERSION}`;
 
 // Statické a neměnné assety (Písma, ikony, externí knihovny z CDN)

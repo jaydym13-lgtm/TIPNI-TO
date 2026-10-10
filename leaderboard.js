@@ -1868,25 +1868,67 @@ window.renderPlayerTipsModalContent = () => {
         };
 
         let rowWinnerHtml = '';
-        if (!isLM && souhrnKola.hracKola && souhrnKola.hracKola.names) {
-            const hk = souhrnKola.hracKola;
-            const winnersArr = hk.names.split(', ').map(n => n.trim()).filter(Boolean);
-            const isMulti = winnersArr.length > 1;
-            const fullNamesHtml = formatNamesList(winnersArr);
+        if (!isLM) {
+            let winnersArr = [];
+            let winnerPoints = 0;
 
-            rowWinnerHtml = `
-                <div class="strip-item ${isMulti ? 'is-expandable' : ''}" ${isMulti ? 'onclick="window.toggleStripRow(this)"' : ''}>
-                    <div class="strip-left">
-                        <span class="strip-icon">${isFullyFinished ? '👑' : '⚡'}</span>
-                        <span class="strip-label">${isFullyFinished ? 'Hráč kola' : 'Průběžný lídr'}</span>
+            if (state.isLiveMode || isFullyFinished) {
+                // V LIVE módu nebo po úplném dohrání bereme data ze souhrnu bota
+                if (souhrnKola.hracKola && souhrnKola.hracKola.names) {
+                    winnersArr = souhrnKola.hracKola.names.split(', ').map(n => n.trim()).filter(Boolean);
+                    winnerPoints = souhrnKola.hracKola.points || 0;
+                }
+            } else {
+                // 🛡️ V nelive rozehraném kole spočítáme průběžného lídra ČISTĚ z dohraných zápasů (z oficiálního zebricek)
+                const klicClean = String(currentRoundName || '').replace(/[^0-9]/g, '');
+                let maxOffPts = -Infinity;
+                let winnersOff = [];
+
+                (centralDoc?.zebricek || []).forEach(p => {
+                    let pts = undefined;
+                    const bMap = p.bodyPoKolech || {};
+                    for (const [k, v] of Object.entries(bMap)) {
+                        if (k === currentRoundName || (klicClean && String(k).replace(/[^0-9]/g, '') === klicClean)) {
+                            pts = v;
+                            break;
+                        }
+                    }
+                    if (pts === undefined && p.otevrenaKola) {
+                        const ok = p.otevrenaKola.find(r => r.round === currentRoundName || (klicClean && String(r.round).replace(/[^0-9]/g, '') === klicClean));
+                        if (ok) pts = ok.points;
+                    }
+                    if (pts !== undefined && pts > maxOffPts && pts > 0) {
+                        maxOffPts = pts;
+                        winnersOff = [p.nickname];
+                    } else if (pts !== undefined && pts === maxOffPts && maxOffPts > 0) {
+                        winnersOff.push(p.nickname);
+                    }
+                });
+
+                if (maxOffPts > 0 && winnersOff.length > 0) {
+                    winnersArr = winnersOff;
+                    winnerPoints = maxOffPts;
+                }
+            }
+
+            if (winnersArr.length > 0 && winnerPoints > 0) {
+                const isMulti = winnersArr.length > 1;
+                const fullNamesHtml = formatNamesList(winnersArr);
+
+                rowWinnerHtml = `
+                    <div class="strip-item ${isMulti ? 'is-expandable' : ''}" ${isMulti ? 'onclick="window.toggleStripRow(this)"' : ''}>
+                        <div class="strip-left">
+                            <span class="strip-icon">${isFullyFinished ? '👑' : '⚡'}</span>
+                            <span class="strip-label">${isFullyFinished ? 'Hráč kola' : 'Průběžný lídr'}</span>
+                        </div>
+                        <div class="strip-right">
+                            <span class="strip-val">${isMulti ? `${winnersArr.length} hráči (+${winnerPoints} b.)` : `${fullNamesHtml} (+${winnerPoints} b.)`}</span>
+                            ${isMulti ? '<span class="strip-arrow">▼</span>' : ''}
+                        </div>
                     </div>
-                    <div class="strip-right">
-                        <span class="strip-val">${isMulti ? `${winnersArr.length} hráči (+${hk.points} b.)` : `${fullNamesHtml} (+${hk.points} b.)`}</span>
-                        ${isMulti ? '<span class="strip-arrow">▼</span>' : ''}
-                    </div>
-                </div>
-                ${isMulti ? `<div class="strip-sub-drawer" style="display: none;">${fullNamesHtml}</div>` : ''}
-            `;
+                    ${isMulti ? `<div class="strip-sub-drawer" style="display: none;">${fullNamesHtml}</div>` : ''}
+                `;
+            }
         }
 
         let rowExactHtml = '';
@@ -1914,29 +1956,35 @@ window.renderPlayerTipsModalContent = () => {
         let rowTopHtml = '';
         if (souhrnKola.topMatch && souhrnKola.topMatch.hasTopMatch && souhrnKola.topMatch.isStarted) {
             const tm = souhrnKola.topMatch;
-            const users = tm.exactUsers || [];
-            const cnt = tm.exactCount || 0;
-            const isMulti = cnt > 1;
-            const fullNamesHtml = formatNamesList(users);
+            // 🛡️ V nelive módu zobrazíme TOP zápas pouze pokud je dohraný, v live módu vždy
+            const topZapasDohrany = zapasyVKole.some(z => z.isTopMatch);
+            const zobrazitTop = state.isLiveMode ? true : (isFullyFinished || topZapasDohrany);
 
-            let rightText = '';
-            if (cnt === 0) rightText = 'Nikdo netrefil';
-            else if (cnt === 1) rightText = fullNamesHtml;
-            else rightText = `${cnt} hráči`;
+            if (zobrazitTop) {
+                const users = tm.exactUsers || [];
+                const cnt = tm.exactCount || 0;
+                const isMulti = cnt > 1;
+                const fullNamesHtml = formatNamesList(users);
 
-            rowTopHtml = `
-                <div class="strip-item ${isMulti ? 'is-expandable' : ''}" ${isMulti ? 'onclick="window.toggleStripRow(this)"' : ''}>
-                    <div class="strip-left">
-                        <span class="strip-icon">🔥</span>
-                        <span class="strip-label">TOP zápas</span>
+                let rightText = '';
+                if (cnt === 0) rightText = 'Nikdo netrefil';
+                else if (cnt === 1) rightText = fullNamesHtml;
+                else rightText = `${cnt} hráči`;
+
+                rowTopHtml = `
+                    <div class="strip-item ${isMulti ? 'is-expandable' : ''}" ${isMulti ? 'onclick="window.toggleStripRow(this)"' : ''}>
+                        <div class="strip-left">
+                            <span class="strip-icon">🔥</span>
+                            <span class="strip-label">TOP zápas</span>
+                        </div>
+                        <div class="strip-right">
+                            <span class="strip-val ${cnt > 0 ? 'is-orange' : 'is-muted'}">${rightText}</span>
+                            ${isMulti ? '<span class="strip-arrow">▼</span>' : ''}
+                        </div>
                     </div>
-                    <div class="strip-right">
-                        <span class="strip-val ${cnt > 0 ? 'is-orange' : 'is-muted'}">${rightText}</span>
-                        ${isMulti ? '<span class="strip-arrow">▼</span>' : ''}
-                    </div>
-                </div>
-                ${isMulti ? `<div class="strip-sub-drawer" style="display: none;">${fullNamesHtml}</div>` : ''}
-            `;
+                    ${isMulti ? `<div class="strip-sub-drawer" style="display: none;">${fullNamesHtml}</div>` : ''}
+                `;
+            }
         }
 
         // 💎 PERFEKTNÍ KOLO (ZOBRAZÍ SE POUZE V TOM KOLE, KDE HO NĚKDO SKUTEČNĚ DAL)
@@ -1967,9 +2015,7 @@ window.renderPlayerTipsModalContent = () => {
         }
 
         const itemsCombined = [rowWinnerHtml, rowExactHtml, rowTopHtml, rowPerfektniHtml].filter(Boolean).join('');
-        // 🛡️ V nelive režimu zobrazujeme statistiky kola POUZE po kompletním dohrání všech zápasů
-        const muzeUkazatStatistiky = state.isLiveMode ? Boolean(itemsCombined) : (Boolean(itemsCombined) && isFullyFinished);
-        if (muzeUkazatStatistiky) {
+        if (itemsCombined) {
             const bannerTitle = isFullyFinished ? '📊 STATISTIKY KOLA' : '📊 STATISTIKY ROZEHRANÉHO KOLA';
             roundBannerHtml = `
                 <div class="player-modal-summary-section">

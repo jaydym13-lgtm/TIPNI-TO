@@ -12,7 +12,7 @@ async function naplanujBudikProKickoff(kickoffMs) {
   const nowMs = Date.now();
   const projectId = process.env.GCLOUD_PROJECT || "tipni-to";
   const location = "europe-west1";
-  const queue = "tipni-tasks";
+  const queue = "tipni-tasks-v2";
   const parent = tasksClient.queuePath(projectId, location, queue);
 
   // 1. Budík T-62 minut (pouze push notifikace nenatipovaným)
@@ -356,7 +356,7 @@ const botWakeupAndKeepAliveTask = onRequest({
     const pingUrl = `${RENDER_BOT_URL.replace(/\/+$/, "")}/cron`;
     await fetch(pingUrl, { 
       headers: { "x-bot-secret": BOT_SECRET },
-      signal: AbortSignal.timeout(12000) 
+      signal: AbortSignal.timeout(50000) 
     });
     console.log("📡 RENDER PING: Signál /cron úspěšně doručen.");
   } catch (e) {
@@ -414,7 +414,7 @@ async function naplanujDalsiKeepAlivePing(nextIteration) {
   const targetMs = Date.now() + delayMs;
   const projectId = process.env.GCLOUD_PROJECT || "tipni-to";
   const location = "europe-west1";
-  const queue = "tipni-tasks";
+  const queue = "tipni-tasks-v2";
   const parent = tasksClient.queuePath(projectId, location, queue);
   const taskId = `task-keepalive-${targetMs}-${nextIteration}`;
   const taskName = `${parent}/tasks/${taskId}`;
@@ -471,7 +471,7 @@ async function naplanujBudikyZR2() {
       }));
       const rJson = JSON.parse(await res.Body.transformToString());
       Object.values(rJson.zapasyMapa || {}).forEach(z => {
-        if (!z.datum || z.apiStatus === "POSTPONED" || z.apiStatus === "FINISHED" || z.vysledek_domaci !== undefined) return;
+        if (!z.datum || z.apiStatus === "POSTPONED" || z.apiStatus === "FINISHED") return;
         const d = Date.parse(z.datum);
         if (isNaN(d)) return;
 
@@ -480,9 +480,13 @@ async function naplanujBudikyZR2() {
 
         if (jeLiveStatus || jeVRozmeziHry) {
           pocetLiveZapasu++;
+          return;
         }
 
-        if (d > nowMs && d <= horizonMs && !jeLiveStatus) {
+        // Pokud už má výsledek a není live, je zápas dohraný
+        if (z.vysledek_domaci !== undefined && z.vysledek_domaci !== null) return;
+
+        if (d > nowMs && d <= horizonMs) {
           uniqueKickoffs.add(d);
         }
       });
@@ -520,7 +524,10 @@ const rescheduleBudikyManual = onRequest({
       console.log(`🔥 RUČNÍ RE-PLAN: Detekováno ${pocetLiveZapasu} běžících zápasů! Ihned pinguji Render a startuji 10min řetěz...`);
       try {
         const pingUrl = `${RENDER_BOT_URL.replace(/\/+$/, "")}/cron`;
-        await fetch(pingUrl, { signal: AbortSignal.timeout(12000) });
+        await fetch(pingUrl, { 
+          headers: { "x-bot-secret": BOT_SECRET },
+          signal: AbortSignal.timeout(50000) 
+        });
         await naplanujDalsiKeepAlivePing(1);
         keepAliveInfo = `Detekováno ${pocetLiveZapasu} běžících zápasů -> Bot probuzen a 10min řetěz úspěšně odpálen!`;
       } catch (e) {

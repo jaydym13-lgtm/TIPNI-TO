@@ -1684,10 +1684,11 @@ window.showPlayerTipsModal = async (playerUid, leagueName) => {
         const koloNazev = window.prelozFaziTurnaje(zap.stage, zap.kolo, zap.isPlayoff) || '1. Kolo';
         roundTotalMatchesMap[koloNazev] = (roundTotalMatchesMap[koloNazev] || 0) + 1;
 
-        const isEvaluated = (zap.vysledek_domaci !== undefined && zap.vysledek_hoste !== undefined && zap.apiStatus !== "IN_PLAY" && zap.apiStatus !== "PAUSED");
-        const jeBeziciLive = (zap.apiStatus === "IN_PLAY" || zap.apiStatus === "PAUSED");
+        // 🛡️ Striktní ověření: vyhodnocený je POUZE oficiálně ukončený zápas
+        const isEvaluated = (zap.apiStatus === "FINISHED") || (zap.vysledek_domaci !== undefined && zap.vysledek_hoste !== undefined && zap.apiStatus !== "IN_PLAY" && zap.apiStatus !== "PAUSED" && zap.apiStatus !== "SCHEDULED");
+        const jeBeziciLive = (zap.apiStatus === "IN_PLAY" || zap.apiStatus === "PAUSED" || Boolean(zap.isLive));
 
-        // 🛡️ V běžném režimu (ne-LIVE) zobrazujeme POUZE oficiálně vyhodnocené zápasy
+        // V LIVE režimu bereme dohrané i běžící; v nelive bereme pouze ukončené zápasy
         if (isLiveMode) {
             if (!isEvaluated && !jeBeziciLive) return;
         } else {
@@ -1734,8 +1735,8 @@ window.renderPlayerTipsModalContent = () => {
     let rowsHtml = '';
     zapasyVKole.forEach(zap => {
         const t = state.hracovyTipy[zap.matchId];
-        const isEvaluated = (zap.vysledek_domaci !== undefined && zap.vysledek_hoste !== undefined && zap.apiStatus !== "IN_PLAY" && zap.apiStatus !== "PAUSED");
-        const jeBeziciLive = (zap.apiStatus === "IN_PLAY" || zap.apiStatus === "PAUSED");
+        const isEvaluated = (zap.apiStatus === "FINISHED") || (zap.vysledek_domaci !== undefined && zap.vysledek_hoste !== undefined && zap.apiStatus !== "IN_PLAY" && zap.apiStatus !== "PAUSED" && zap.apiStatus !== "SCHEDULED");
+        const jeBeziciLive = (zap.apiStatus === "IN_PLAY" || zap.apiStatus === "PAUSED" || Boolean(zap.isLive));
 
         if (isEvaluated) evaluatedCount++;
         else if (jeBeziciLive) liveCount++;
@@ -1753,11 +1754,14 @@ window.renderPlayerTipsModalContent = () => {
         let tipColor = '#9ca3af';
         let tipStr = '?:?';
 
+        // 🔒 ZÁMEK BODOVÁNÍ: V nelive módu se body počítají VÝHRADNĚ z dohraných zápasů (isEvaluated)
+        const muzeBodovat = state.isLiveMode ? (isEvaluated || jeBeziciLive) : isEvaluated;
+
         if (t) {
             tipStr = window.formatujZobrazeneSkore(t.tip_domaci, t.tip_hoste, t.postup, state.leagueName, zap.isPlayoff);
             tipColor = '#ffffff';
 
-            if (isEvaluated || (jeBeziciLive && state.isLiveMode)) {
+            if (muzeBodovat) {
                 const badgeInfo = window.urciBarvuATriduBodu(t.tip_domaci, t.tip_hoste, prubDomaci, prubHoste, state.leagueName, t.postup, zap.postup, zap.isPlayoff, zap.isTopMatch, true);
                 ptsStr = badgeInfo.ptsStr;
                 ptsColor = badgeInfo.color;
@@ -1765,7 +1769,7 @@ window.renderPlayerTipsModalContent = () => {
                 exactClass = badgeInfo.exactClass;
                 roundTotalPts += badgeInfo.pts;
             }
-        } else if (isEvaluated || (jeBeziciLive && state.isLiveMode)) {
+        } else if (muzeBodovat) {
             const badgeInfo = window.urciBarvuATriduBodu('', '', prubDomaci, prubHoste, state.leagueName, '', zap.postup, zap.isPlayoff, zap.isTopMatch, false);
             ptsStr = badgeInfo.ptsStr;
             ptsColor = badgeInfo.color;
@@ -1963,7 +1967,9 @@ window.renderPlayerTipsModalContent = () => {
         }
 
         const itemsCombined = [rowWinnerHtml, rowExactHtml, rowTopHtml, rowPerfektniHtml].filter(Boolean).join('');
-        if (itemsCombined) {
+        // 🛡️ V nelive režimu zobrazujeme statistiky kola POUZE po kompletním dohrání všech zápasů
+        const muzeUkazatStatistiky = state.isLiveMode ? Boolean(itemsCombined) : (Boolean(itemsCombined) && isFullyFinished);
+        if (muzeUkazatStatistiky) {
             const bannerTitle = isFullyFinished ? '📊 STATISTIKY KOLA' : '📊 STATISTIKY ROZEHRANÉHO KOLA';
             roundBannerHtml = `
                 <div class="player-modal-summary-section">

@@ -677,30 +677,24 @@ const vstrikniStoresDoPameti = () => {
 
                 const vybranaVolba = this.unikatniKolaProgramu[this.programKolaIndex] || 'Nadcházející zápasy';
 
-                // 2. REŽIM PROGRAMU: NADCHÁZEJÍCÍ ZÁPASY (ČISTÁ CHRONOLOGIE DOPŘEDU S MIN. 8 ZÁPASY)
+                // 2. REŽIM PROGRAMU: NADCHÁZEJÍCÍ ZÁPASY (2 KOMPLETNÍ NEJBLIŽŠÍ KOLA)
                 if (this.programKolaIndex === 0 || vybranaVolba === 'Nadcházející zápasy') {
-                    if (budouciZapasy.length <= 8) return budouciZapasy;
-
                     const vybraneZapasy = [];
-                    let datumHraniceMs = 0;
+                    const nalezenaKola = new Set();
 
                     for (let i = 0; i < budouciZapasy.length; i++) {
                         const z = budouciZapasy[i];
-                        const zMs = z.datumMs || (z.datumObj ? z.datumObj.getTime() : 0);
+                        const koloRaw = window.prelozFaziTurnaje ? window.prelozFaziTurnaje(z.stage, z.kolo, z.isPlayoff) : (z.kolo || 'Šampionát');
+                        const cisteKolo = String(koloRaw || 'Šampionát').trim();
 
-                        if (vybraneZapasy.length < 8) {
-                            vybraneZapasy.push(z);
-                            datumHraniceMs = zMs;
-                        } else {
-                            // Dobereme zápasy ze stejného dne / do 36 h od 8. zápasu (aby se nerozseklo rozehrané kolo),
-                            // ale zápas o měsíc dál sem nikdy neprojde.
-                            if (datumHraniceMs && (zMs - datumHraniceMs) <= 36 * 60 * 60 * 1000) {
-                                vybraneZapasy.push(z);
-                                datumHraniceMs = zMs;
-                            } else {
+                        if (!nalezenaKola.has(cisteKolo)) {
+                            if (nalezenaKola.size >= 2) {
+                                // Máme nasbíraná 2 celá nadcházející kola -> zde feed uzavíráme
                                 break;
                             }
+                            nalezenaKola.add(cisteKolo);
                         }
+                        vybraneZapasy.push(z);
                     }
                     return vybraneZapasy;
                 } else {

@@ -6,6 +6,7 @@
   <img src="https://img.shields.io/badge/Storage-Cloudflare_R2-f38020?style=for-the-badge&logo=cloudflare&logoColor=white" alt="Cloudflare R2">
   <img src="https://img.shields.io/badge/Backend-Firebase_v11-ffca28?style=for-the-badge&logo=firebase&logoColor=black" alt="Firebase">
   <img src="https://img.shields.io/badge/Engine-Node.js_22-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js 22">
+  <img src="https://img.shields.io/badge/AI_Pair_Programming-Google_Gemini-4285f4?style=for-the-badge&logo=googlegemini&logoColor=white" alt="Google Gemini AI">
 </p>
 
 <p align="center">
@@ -81,8 +82,9 @@
 
 ## 👨‍💻 Autor a poděkování
 
-* **Vývoj a architektura:** [@jaydym13-lgtm](https://github.com/jaydym13-lgtm)
-* **Herní pravidla a bodový balanc:**
+- **Návrh a realizace:** [@jaydym13-lgtm](https://github.com/jaydym13-lgtm) (koncept, vizuál, herní logika a správa systému)
+- **Kódová asistence:** Google Gemini (pomoc s psaním kódu a architekturou)
+- **Herní pravidla a bodový balanc:**
   * ⚽ **Švéřa** – systém bodování fotbalových soutěží
   * 🏒 **Ďoubas** – systém bodování hokejových soutěží 
-* **Web aplikace:** [tipni-to.netlify.app](https://tipni-to.netlify.app)
+- **Web aplikace:** [tipni-to.netlify.app](https://tipni-to.netlify.app)

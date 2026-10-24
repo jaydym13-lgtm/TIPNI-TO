@@ -3099,13 +3099,38 @@ button.action-btn.btn-bonus-save { background: #059669; color: white; padding: 8
 
 /* Úklid live doplňků z inline stylů */
 .live-radar-box {
-    background: #7f1d1d; 
-    border-color: #ef4444;
+    background: #0f0505; 
+    border: 1.5px solid rgba(239, 68, 68, 0.7);
+    box-shadow: inset 0 0 8px rgba(239, 68, 68, 0.2);
 }
 
 .live-radar-label {
-    color: #fca5a5; 
-    animation: pulse 1s infinite;
+    color: #34d399; 
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 58px;
+    text-align: center;
+    line-height: 1;
+    text-shadow: 0 0 6px rgba(52, 211, 153, 0.4);
+}
+
+.live-radar-box.is-break {
+    background: #140d02;
+    border-color: rgba(245, 158, 11, 0.75);
+    box-shadow: inset 0 0 8px rgba(245, 158, 11, 0.2);
+}
+
+.live-radar-box.is-break .live-radar-label {
+    color: #fbbf24;
+    font-size: 0.58rem;
+    letter-spacing: 0.4px;
+    text-shadow: 0 0 6px rgba(251, 191, 36, 0.4);
+    animation: none;
 }
 
 .live-radar-value {
@@ -4957,15 +4982,17 @@ body .custom-dropdown-item {
 .h2h-spy-op-tip { color: #f87171; }
 
 /* =========================================================================
-   🏆 TIPNI TO! CHAMPIONS CUP - FÁZE 1 (ŽIVÁ PROJEKCE SKUPIN)
+   🏆 TIPNI CUP - POHÁROVÁ ARÉNA & K.O. PAVOUK ARCHITEKTURA
    ========================================================================= */
 .cup-wrapper {
     max-width: 1000px;
     margin: 0 auto;
-    padding: 12px 8px;
+    padding: 12px 8px 30px 8px;
     display: flex;
     flex-direction: column;
     gap: 12px;
+    box-sizing: border-box;
+    width: 100%;
 }
 
 .cup-main-screen-title {
@@ -4976,116 +5003,24 @@ body .custom-dropdown-item {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     text-align: center;
-    margin: 6px 0 12px 0;
+    margin: 6px 0 10px 0;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
     width: 100%;
     box-sizing: border-box;
-}
-
-/* 💡 HERO KARTA PREMIER CUPU PRO NEHLASUJÍCÍ HRÁČE */
-.cup-hero-card {
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-    border: 1.5px solid #fbbf24;
-    border-radius: 12px;
-    padding: 14px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(251, 191, 36, 0.15);
-    text-align: left;
-    box-sizing: border-box;
-    width: 100%;
-}
-
-.cup-hero-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    border-bottom: 1px solid rgba(251, 191, 36, 0.3);
-    padding-bottom: 8px;
-}
-
-.cup-hero-icon {
-    font-size: 1.25rem;
-    flex-shrink: 0;
-}
-
-.cup-hero-title {
-    font-family: 'Oswald', sans-serif;
-    font-size: 0.98rem;
-    font-weight: 800;
-    color: #fbbf24;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-}
-
-.cup-hero-body {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.cup-hero-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-}
-
-.cup-hero-item-icon {
-    font-size: 1.05rem;
-    line-height: 1.3;
-    flex-shrink: 0;
-}
-
-.cup-hero-item-text {
-    font-size: 0.82rem;
-    color: #cbd5e1;
-    line-height: 1.45;
-}
-
-.cup-hero-item-text strong {
-    color: #ffffff;
-}
-
-.cup-hero-btn {
-    width: 100%;
-    min-height: 42px;
-    background: linear-gradient(135deg, #ea580c 0%, #dc2626 100%);
-    color: #ffffff;
-    border: 1px solid rgba(249, 115, 22, 0.5);
-    border-radius: 8px;
-    font-family: 'Oswald', sans-serif;
-    font-size: 0.88rem;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    cursor: pointer;
-    box-shadow: 0 4px 15px rgba(234, 88, 12, 0.35);
-    transition: transform 0.1s ease, filter 0.15s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 10px;
-    margin-top: 4px;
-    box-sizing: border-box;
-}
-
-.cup-hero-btn:active {
-    transform: scale(0.97);
-    filter: brightness(1.15);
 }
 
 .cup-preview-badge {
-    background: linear-gradient(135deg, rgba(147, 51, 234, 0.25) 0%, rgba(79, 70, 229, 0.25) 100%);
-    border: 1px solid rgba(168, 85, 247, 0.4);
-    box-shadow: 0 0 15px rgba(168, 85, 247, 0.2);
-    border-radius: 12px;
-    padding: 10px 14px;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.15) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
+    border-radius: 10px;
+    padding: 9px 12px;
     text-align: center;
-    color: #e9d5ff;
+    color: #34d399;
+    font-family: 'Oswald', sans-serif;
     font-size: 0.85rem;
     font-weight: 700;
     letter-spacing: 0.5px;
@@ -5093,135 +5028,261 @@ body .custom-dropdown-item {
     align-items: center;
     justify-content: center;
     gap: 8px;
+    box-sizing: border-box;
+    width: 100%;
 }
 
-.cup-groups-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 12px;
-}
-
-.cup-group-card {
-    background: #0f172a;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    padding: 12px;
+/* 🏟️ POHÁROVÁ ARÉNA (LIGOVÁ TABULKA VŠECH HRÁČŮ) */
+.cup-arena-container {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    gap: 5px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
-.cup-group-header {
+.cup-arena-row {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding-bottom: 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    font-weight: 800;
-    font-size: 0.95rem;
-}
-
-.cup-group-title-A { color: #38bdf8; }
-.cup-group-title-B { color: #4ade80; }
-.cup-group-title-C { color: #fbbf24; }
-.cup-group-title-D { color: #f43f5e; }
-
-.cup-player-row {
-    display: flex;
     justify-content: space-between;
-    align-items: center;
-    padding: 6px 10px;
-    background: rgba(255, 255, 255, 0.03);
+    padding: 7px 12px;
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-left: 4px solid #374151;
     border-radius: 8px;
-    font-size: 0.82rem;
-    border: 1px solid transparent;
-    border-left: 4px solid transparent;
+    box-sizing: border-box;
+    width: 100%;
+    gap: 8px;
     transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-/* 🥇 1. místo ve skupině / TOP 2 v tabulce 2. míst (Postup do TOP 6) */
-.cup-player-row.is-top6 {
-    background: rgba(16, 185, 129, 0.12);
-    border-color: rgba(16, 185, 129, 0.35);
-    border-left-color: #10b981;
+.cup-arena-row:hover {
+    background: #1a2332;
 }
-.cup-player-row.is-top6 .cup-player-rank {
+
+/* 👑 Elitní pásmo: Královské volno / Přímý postup */
+.cup-arena-row.is-bye {
+    border-left-color: #10b981;
+    background: rgba(16, 185, 129, 0.06);
+}
+
+.cup-arena-row.is-bye .cup-arena-rank {
     color: #34d399;
 }
 
-/* 🥈 2. místo ve skupině (Postup do Souboje 2. míst) */
-.cup-player-row.is-second {
-    background: rgba(56, 189, 248, 0.10);
-    border-color: rgba(56, 189, 248, 0.30);
-    border-left-color: #38bdf8;
-}
-.cup-player-row.is-second .cup-player-rank {
-    color: #38bdf8;
-}
-
-/* 🥉 3. místo ve skupině Premier Cupu (Postup do 2. Předkola - Fialový akcent) */
-.cup-player-row.is-third {
-    background: rgba(168, 85, 247, 0.12);
-    border-color: rgba(168, 85, 247, 0.35);
-    border-left-color: #a855f7;
-}
-.cup-player-row.is-third .cup-player-rank {
-    color: #c084fc;
-}
-
-/* 🥊 Předkolo (4. a 5. místo v Premier Cupu / 3. a 4. v Chance Cupu - Oranžový akcent) */
-.cup-player-row.is-predkolo {
-    background: rgba(234, 88, 12, 0.10);
-    border-color: rgba(234, 88, 12, 0.30);
+/* 🥊 Pásmo předkola */
+.cup-arena-row.is-predkolo {
     border-left-color: #f97316;
+    background: rgba(234, 88, 12, 0.04);
 }
-.cup-player-row.is-predkolo .cup-player-rank {
+
+.cup-arena-row.is-predkolo .cup-arena-rank {
     color: #fb923c;
 }
 
-/* 👤 Zvýraznění přihlášeného hráče (Čistá kaskáda: Champion Gold outline + neon glow) */
-.cup-player-row.is-me {
+/* ⭐ Pásmo pohárového volna (Single Bye) */
+.cup-arena-row.is-single-bye {
+    border-left-color: #38bdf8;
+    background: rgba(56, 189, 248, 0.05);
+}
+
+.cup-arena-row.is-single-bye .cup-arena-rank {
+    color: #38bdf8;
+}
+
+/* 👤 Zvýraznění přihlášeného hráče */
+.cup-arena-row.is-me {
     position: relative;
     z-index: 2;
     outline: 2px solid #fbbf24;
     outline-offset: -1px;
-    box-shadow: 0 0 16px rgba(251, 191, 36, 0.45);
+    background: linear-gradient(90deg, rgba(251, 191, 36, 0.14) 0%, #111827 100%);
+    box-shadow: 0 0 16px rgba(251, 191, 36, 0.35);
 }
 
-.cup-player-row.is-me .cup-player-nick {
+.cup-arena-row.is-me .cup-arena-nick {
     color: #ffffff;
     font-weight: 800;
-    text-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
-}
-
-.cup-player-row.is-me .cup-player-pts {
-    color: #fbbf24;
     text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
 }
 
-.cup-player-rank {
-    color: #64748b;
-    font-size: 0.75rem;
-    font-weight: 700;
-    width: 24px;
+.cup-arena-row.is-me .cup-arena-pts {
+    color: #fbbf24;
+    text-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
 }
 
-.cup-player-nick {
+.cup-arena-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
     flex: 1;
+}
+
+.cup-arena-rank {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #9ca3af;
+    min-width: 26px;
+    text-align: center;
+    line-height: 1;
+}
+
+.cup-arena-nick {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.95rem;
     font-weight: 700;
     color: #f1f5f9;
+    letter-spacing: 0.3px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1;
 }
 
-.cup-player-pts {
+.cup-arena-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.cup-arena-badge {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.65rem;
     font-weight: 800;
-    color: #fbbf24;
+    letter-spacing: 0.4px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    line-height: 1;
+    white-space: nowrap;
 }
 
-/* 🌳 K.O. PAVOUK & PRAVIDLA POHÁRU - FÁZE 2 */
+.cup-arena-badge.is-bye {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.cup-arena-badge.is-predkolo {
+    background: rgba(234, 88, 12, 0.15);
+    color: #fb923c;
+    border: 1px solid rgba(249, 115, 22, 0.4);
+}
+
+.cup-arena-badge.is-single-bye {
+    background: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.cup-arena-pts {
+    font-family: 'Oswald', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #34d399;
+    min-width: 38px;
+    text-align: right;
+    line-height: 1;
+}
+
+/* 📋 DECENTNÍ SPODNÍ LEGENDA POHÁROVÉ ARÉNY */
+.cup-arena-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 14px;
+    background: #0f172a;
+    border: 1px solid #1f2937;
+    border-radius: 8px;
+    box-sizing: border-box;
+    width: 100%;
+    margin-top: 4px;
+}
+
+.cup-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: #cbd5e1;
+    line-height: 1;
+}
+
+.cup-legend-box {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.cup-legend-box.is-bye {
+    background-color: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.cup-legend-box.is-predkolo {
+    background-color: #f97316;
+    box-shadow: 0 0 8px rgba(249, 115, 22, 0.6);
+}
+
+.cup-legend-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-top: 8px;
+    margin-top: 4px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.12);
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: #fbbf24;
+    letter-spacing: 0.3px;
+    line-height: 1.35;
+    text-align: left;
+}
+
+.cup-legend-box.is-single-bye {
+    background-color: #38bdf8;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+}
+
+/* 🎯 PLOVOUCÍ TLAČÍTKO: MOJE POZICE V ARÉNĚ */
+.cup-my-pos-fab {
+    position: fixed;
+    bottom: 14px;
+    left: 14px;
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 20px;
+    background: #0f172a;
+    border: 1.5px solid #fbbf24;
+    color: #fbbf24;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7), 0 0 12px rgba(251, 191, 36, 0.3);
+    z-index: 840;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: transform 0.12s ease;
+}
+
+.cup-my-pos-fab:active {
+    transform: scale(0.95);
+}
+
+/* 📋 PRAVIDLA TURNAJE */
 .cup-rules-card {
     background: #0f172a;
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -5257,26 +5318,57 @@ body .custom-dropdown-item {
 
 .cup-rules-text {
     font-size: 0.84rem;
-    color: #94a3b8;
+    color: #9ca3af;
     line-height: 1.5;
     margin: 0;
 }
 
-.cup-bracket-tree {
+/* 🌳 K.O. PAVOUK ENGINE - HORIZONTÁLNÍ SWIPE STROM */
+.cup-bracket-scroll-container {
     display: flex;
-    flex-direction: column;
-    gap: 12px;
+    flex-direction: row;
+    gap: 14px;
     width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    box-sizing: border-box;
+    padding: 4px 2px 14px 2px;
 }
 
-.cup-stage-box {
+.cup-bracket-scroll-container::-webkit-scrollbar {
+    height: 5px;
+}
+.cup-bracket-scroll-container::-webkit-scrollbar-track {
+    background: #0b0f19;
+    border-radius: 4px;
+}
+.cup-bracket-scroll-container::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 4px;
+}
+
+.cup-bracket-scroll-container .cup-stage-box {
+    min-width: 285px;
+    max-width: 310px;
+    flex-shrink: 0;
+    scroll-snap-align: start;
     background: #0f172a;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 12px;
-    padding: 14px;
+    padding: 12px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
+    box-sizing: border-box;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.cup-bracket-scroll-container .cup-stage-box:last-child {
+    border-color: rgba(251, 191, 36, 0.45);
+    background: linear-gradient(180deg, rgba(251, 191, 36, 0.08) 0%, #0f172a 100%);
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.15);
 }
 
 .cup-stage-header {
@@ -5284,7 +5376,7 @@ body .custom-dropdown-item {
     justify-content: space-between;
     align-items: center;
     font-family: 'Oswald', sans-serif;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
     font-weight: 700;
     color: #f97316;
     letter-spacing: 0.5px;
@@ -5292,55 +5384,37 @@ body .custom-dropdown-item {
     padding-bottom: 6px;
 }
 
-.cup-match-slot {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px dashed rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    padding: 10px 12px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.82rem;
-    color: #94a3b8;
-}
-
-/* 🌳 K.O. PAVOUK ENGINE - FÁZE 4 */
-.cup-bracket-scroll-container {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    width: 100%;
-    box-sizing: border-box;
-}
-
 .cup-bracket-match-card {
-    background: #0f172a;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    padding: 10px 12px;
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 8px;
+    padding: 8px 10px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
     position: relative;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    box-sizing: border-box;
+    width: 100%;
 }
 
 .cup-bracket-match-card.is-my-match {
     border: 1.5px solid #10b981;
-    background: rgba(16, 185, 129, 0.05);
-    box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, #111827 100%);
+    box-shadow: 0 0 14px rgba(16, 185, 129, 0.3);
 }
 
 .cup-duel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.7rem;
-    color: #94a3b8;
-    font-family: monospace;
+    font-size: 0.68rem;
+    color: #9ca3af;
+    font-family: 'Oswald', sans-serif;
+    letter-spacing: 0.4px;
     text-transform: uppercase;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     padding-bottom: 4px;
 }
 
@@ -5349,13 +5423,15 @@ body .custom-dropdown-item {
     justify-content: space-between;
     align-items: center;
     padding: 4px 6px;
-    border-radius: 6px;
-    font-size: 0.85rem;
+    border-radius: 5px;
+    font-size: 0.84rem;
+    background: rgba(255, 255, 255, 0.02);
+    box-sizing: border-box;
 }
 
 .cup-duel-row.is-winner {
-    background: rgba(16, 185, 129, 0.12);
-    font-weight: bold;
+    background: rgba(16, 185, 129, 0.15);
+    border-left: 3px solid #10b981;
 }
 
 .cup-duel-player {
@@ -5366,17 +5442,22 @@ body .custom-dropdown-item {
     text-overflow: ellipsis;
     white-space: nowrap;
     color: #f1f5f9;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.88rem;
+    flex: 1;
+    min-width: 0;
 }
 
 .cup-duel-scores {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     font-family: monospace;
+    flex-shrink: 0;
 }
 
 .cup-duel-legs {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     color: #64748b;
 }
 
@@ -5384,12 +5465,14 @@ body .custom-dropdown-item {
     font-size: 0.95rem;
     font-weight: 800;
     color: #fbbf24;
-    min-width: 32px;
+    min-width: 28px;
     text-align: right;
+    line-height: 1;
 }
 
 .cup-duel-total.is-winning {
     color: #34d399;
+    text-shadow: 0 0 8px rgba(52, 211, 153, 0.4);
 }
 
 /* 🌟 HORNÍ MICRO TOOLBAR - STYLY A AKTIVNÍ STAV */
@@ -8365,4 +8448,893 @@ body .custom-dropdown-item {
     letter-spacing: 0.5px;
     box-sizing: border-box;
     width: 100%;
+}
+
+/* ========================================================================= */
+/* 🎛️ SHOWROOM TOGGLER UVNITŘ MODÁLU SEŘAZENÍ                              */
+/* ========================================================================= */
+.reorder-showroom-strip {
+    padding: 10px 14px;
+    background: rgba(56, 189, 248, 0.08);
+    border-bottom: 1px solid #1f2937;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.reorder-showroom-info {
+    text-align: left;
+    padding-right: 10px;
+}
+
+.reorder-showroom-title {
+    color: #38bdf8;
+    font-weight: bold;
+    font-size: 0.82rem;
+    display: block;
+}
+
+.reorder-showroom-desc {
+    color: #9ca3af;
+    font-size: 0.72rem;
+    line-height: 1.3;
+    display: block;
+}
+
+/* ========================================================================= */
+/* 🗂️ DĚLICÍ PŘEDĚL KATALOGU & ŠTÍTEK NÁHLEDU                                */
+/* ========================================================================= */
+.katalog-divider {
+    width: 100%;
+    margin: 8px 0 2px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    box-sizing: border-box;
+    padding: 0 4px;
+}
+
+.katalog-divider span {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #38bdf8;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    white-space: nowrap;
+}
+
+.katalog-divider-line-left {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(56, 189, 248, 0.4) 100%);
+}
+
+.katalog-divider-line-right {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(56, 189, 248, 0.4) 0%, transparent 100%);
+}
+
+.katalog-card-sub.is-preview {
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.4);
+    background: rgba(56, 189, 248, 0.12);
+}
+
+/* ========================================================================= */
+/* 👥 SPRÁVA PARTIČEK A SOUKROMÝCH SKUPIN (SUPERADMIN KOKPIT) */
+/* ========================================================================= */
+.groups-admin-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+}
+
+.groups-admin-topbar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-sizing: border-box;
+}
+
+.groups-create-collapsible {
+    width: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #059669;
+    background: #111827;
+}
+
+.group-create-toggle-btn {
+    width: 100%;
+    height: 38px;
+    background: rgba(16, 185, 129, 0.12);
+    border: none;
+    color: #34d399;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    text-transform: uppercase;
+}
+
+.group-create-collapse-body {
+    padding: 12px;
+    border-top: 1px solid rgba(16, 185, 129, 0.3);
+    background: #0f172a;
+}
+
+.groups-create-row {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+}
+
+.groups-create-input {
+    flex: 1;
+    height: 38px;
+    background: #111827;
+    border: 1px solid #4b5563;
+    border-radius: 6px;
+    padding: 0 10px;
+    color: #ffffff;
+    font-size: 0.88rem;
+    margin: 0;
+    box-sizing: border-box;
+}
+.groups-create-input:focus {
+    border-color: #34d399;
+    outline: none;
+}
+
+.groups-create-btn {
+    height: 38px;
+    background: #059669;
+    border: 1px solid #10b981;
+    border-radius: 6px;
+    color: #ffffff;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0 16px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+    margin: 0;
+}
+.groups-create-btn:active { transform: scale(0.96); }
+
+.groups-list-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+/* 🎯 JEDNOŘÁDKOVÝ STRUKTUROVANÝ PANEL PARTY */
+.group-admin-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 44px;
+    gap: 8px;
+}
+
+.group-admin-card-head:hover {
+    background: #243042;
+    border-color: #4b5563;
+}
+
+.group-admin-row-left {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-align: left;
+}
+
+.group-admin-row-name {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    line-height: 1.2;
+}
+
+.group-admin-row-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.group-status-pill {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    line-height: 1;
+}
+.group-status-pill.active {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    border: 1px solid #059669;
+}
+.group-status-pill.pending {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border: 1px solid #d97706;
+}
+
+.group-count-pill {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #e5e7eb;
+    background: #111827;
+    border: 1px solid #374151;
+    padding: 2px 7px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.group-arrow-icon {
+    color: #9ca3af;
+    font-size: 0.72rem;
+    width: 10px;
+    text-align: center;
+}
+
+/* 📂 ROZBALENÝ DETAIL */
+.group-admin-dropdown {
+    background: #0f172a;
+    border: 1px solid #374151;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    margin-top: -4px;
+    padding: 14px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+    width: 100%;
+}
+
+.group-detail-fullname {
+    font-family: 'Oswald', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #38bdf8;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.group-code-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 6px;
+    padding: 8px 12px;
+    gap: 8px;
+}
+
+.group-code-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.76rem;
+    color: #9ca3af;
+}
+
+.group-code-info strong {
+    font-family: monospace;
+    font-size: 1rem;
+    color: #fbbf24;
+    letter-spacing: 1px;
+}
+
+.group-copy-btn {
+    background: #1f2937;
+    border: 1px solid #4b5563;
+    color: #fbbf24;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    margin: 0;
+    white-space: nowrap;
+}
+.group-copy-btn:active { transform: scale(0.95); }
+
+.group-detail-actions-row {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+}
+
+.group-btn-secondary {
+    flex: 1;
+    height: 38px;
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 6px;
+    color: #e5e7eb;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    margin: 0;
+}
+.group-btn-secondary:hover { background: #374151; }
+
+.group-btn-primary {
+    flex: 1;
+    height: 38px;
+    background: #2563eb;
+    border: 1px solid #60a5fa;
+    border-radius: 6px;
+    color: #ffffff;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    margin: 0;
+}
+.group-btn-primary:hover { background: #1d4ed8; }
+
+.group-danger-strip {
+    border-top: 1px dashed #374151;
+    padding-top: 8px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.group-danger-link {
+    background: transparent;
+    border: none;
+    color: #f87171;
+    font-size: 0.75rem;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 4px 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    margin: 0;
+}
+.group-danger-link:hover { color: #ef4444; }
+
+/* 👤 MODÁL: ČLENOVÉ PARTY */
+.group-modal-members-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 55vh;
+    overflow-y: auto;
+    padding: 6px 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.group-modal-member-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    color: #f3f4f6;
+    box-sizing: border-box;
+}
+
+.group-admin-tag {
+    font-size: 0.68rem;
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Oswald', sans-serif;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    line-height: 1;
+    margin-left: 6px;
+}
+
+.group-modal-member-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.group-modal-admin-btn {
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid #0284c7;
+    color: #38bdf8;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.70rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 0;
+    text-transform: uppercase;
+    transition: background 0.15s ease;
+}
+.group-modal-admin-btn:hover { background: #0284c7; color: #ffffff; }
+
+.group-modal-remove-btn {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid #dc2626;
+    color: #f87171;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.70rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 0;
+    text-transform: uppercase;
+    transition: background 0.15s ease;
+}
+.group-modal-remove-btn:hover { background: #dc2626; color: #ffffff; }
+
+/* 📋 MODÁL: HROMADNÉ PŘIŘAZENÍ (CHECKLIST) */
+.group-checklist-modal-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+}
+
+.group-checklist-search {
+    width: 100%;
+    height: 38px;
+    background: #111827;
+    border: 1px solid #4b5563;
+    border-radius: 6px;
+    padding: 0 12px;
+    color: #ffffff;
+    font-size: 0.88rem;
+    margin: 0;
+    box-sizing: border-box;
+    text-align: left;
+}
+.group-checklist-search:focus {
+    border-color: #38bdf8;
+    outline: none;
+}
+
+.group-checklist-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 50vh;
+    overflow-y: auto;
+    padding-right: 4px;
+    box-sizing: border-box;
+}
+
+.group-checklist-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    color: #e5e7eb;
+    cursor: pointer;
+    user-select: none;
+}
+.group-checklist-row:hover {
+    background: #1a2332;
+}
+
+.group-checklist-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #10b981;
+    cursor: pointer;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.group-checklist-submit-btn {
+    width: 100%;
+    height: 42px;
+    background: #059669;
+    border: 1px solid #10b981;
+    border-radius: 8px;
+    color: #ffffff;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    text-transform: uppercase;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.group-checklist-submit-btn:hover { background: #10b981; }
+.group-checklist-submit-btn:active { transform: scale(0.98); }
+
+/* ========================================================================= */
+/* 👥 PŘEPÍNAČ PARTIČEK NA SAMÉM VRCHOLU STRÁNKY & BOTTOM SHEET ENGINE       */
+/* ========================================================================= */
+.group-select-bar-wrapper {
+    width: 100%;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+}
+
+.group-select-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 42px;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border: 1px solid #334155;
+    border-left: 5px solid #0284c7;
+    border-radius: 10px;
+    padding: 0 12px;
+    cursor: pointer;
+    user-select: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    box-sizing: border-box;
+    width: 100%;
+}
+.group-select-bar:hover {
+    border-color: #38bdf8;
+    background: #1e293b;
+}
+.group-select-bar:active {
+    transform: scale(0.985);
+}
+
+.group-select-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-align: left;
+}
+
+.group-select-bar-icon {
+    font-size: 1.05rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.group-select-bar-info {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.group-select-bar-title {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1;
+}
+
+.group-select-bar-rank {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #38bdf8;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.group-select-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.group-fav-star-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    line-height: 1;
+    transition: all 0.15s ease;
+}
+.group-fav-star-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+.group-fav-star-btn.is-fav,
+.group-fav-star-btn:has(span[style*="251"]) {
+    background: rgba(251, 191, 36, 0.2);
+    border: 1.5px solid #fbbf24;
+    box-shadow: 0 0 12px rgba(251, 191, 36, 0.55);
+}
+.group-fav-star-btn:active {
+    transform: scale(0.9);
+}
+
+.group-select-bar-arrow {
+    color: #9ca3af;
+    font-size: 0.72rem;
+}
+
+/* 👥 CENTROVANÝ MODÁL PRO VÝBĚR PARTIČEK */
+.group-modal-box {
+    max-width: 440px;
+    width: 95%;
+    max-height: 85vh;
+}
+
+.group-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    overflow-y: auto;
+    max-height: 52vh;
+    box-sizing: border-box;
+}
+
+.group-modal-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    user-select: none;
+    box-sizing: border-box;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.group-modal-row:hover { background: #1e293b; border-color: #374151; }
+.group-modal-row.is-active {
+    background: rgba(2, 132, 199, 0.12);
+    border-color: #0284c7;
+    border-left: 5px solid #38bdf8;
+}
+
+.group-modal-row-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+    text-align: left;
+}
+
+.group-modal-icon { font-size: 1.15rem; flex-shrink: 0; }
+
+.group-modal-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.group-modal-name {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.group-modal-row.is-active .group-modal-name { color: #38bdf8; }
+
+.group-modal-sub {
+    font-size: 0.74rem;
+    color: #9ca3af;
+}
+
+.group-modal-row-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.group-modal-star-btn {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    line-height: 1;
+    transition: all 0.15s ease;
+}
+.group-modal-star-btn:hover {
+    border-color: #fbbf24;
+}
+.group-modal-star-btn.is-fav,
+.group-modal-star-btn:has(span[style*="251"]) {
+    background: rgba(251, 191, 36, 0.22);
+    border: 1.5px solid #fbbf24;
+    box-shadow: 0 0 12px rgba(251, 191, 36, 0.55);
+}
+.group-modal-star-btn:active {
+    transform: scale(0.9);
+}
+
+.group-modal-badge {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 800;
+    background: rgba(56, 189, 248, 0.18);
+    color: #38bdf8;
+    border: 1px solid #0284c7;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.4px;
+}
+
+.group-modal-footer {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #111827;
+    border-top: 1px solid #374151;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.group-modal-btn {
+    flex: 1;
+    height: 40px;
+    border-radius: 8px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    margin: 0;
+    transition: filter 0.15s ease, transform 0.1s ease;
+}
+.group-modal-btn:active { transform: scale(0.97); }
+
+.group-modal-btn.join-btn {
+    background: #1f2937;
+    border: 1px solid #3b82f6;
+    color: #60a5fa;
+}
+.group-modal-btn.join-btn:hover { background: #2563eb; color: #ffffff; }
+
+.group-modal-btn.create-btn {
+    background: #064e3b;
+    border: 1px solid #10b981;
+    color: #34d399;
+}
+.group-modal-btn.create-btn:hover { background: #059669; color: #ffffff; }
+
+/* 🎯 TLAČÍTKO V HORNÍ LIŠTĚ & VÝSTRAŽNÝ MAJÁK ROZPRACOVANÝCH TIPŮ */
+.global-save-all-btn {
+    background: #2563eb;
+    color: #ffffff;
+    height: 36px;
+    padding: 0 10px;
+    font-weight: bold;
+    font-size: 0.72rem;
+    border: 1px solid #60a5fa;
+    border-radius: 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-family: 'Oswald', sans-serif;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    margin: 0;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.global-save-all-btn.is-dirty {
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    border-color: #fdba74;
+    color: #ffffff;
+    box-shadow: 0 0 14px rgba(234, 88, 12, 0.65), 0 2px 8px rgba(0, 0, 0, 0.4);
+    animation: saveDirtyPulse 1.6s infinite ease-in-out;
+}
+
+.global-save-all-btn.is-incomplete {
+    background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%);
+    border-color: #fef08a;
+    color: #0f172a;
+    box-shadow: 0 0 12px rgba(234, 179, 8, 0.5);
+    animation: saveDirtyPulse 1.6s infinite ease-in-out;
+}
+
+@keyframes saveDirtyPulse {
+    0% { transform: scale(0.97); }
+    50% { transform: scale(1.03); }
+    100% { transform: scale(0.97); }
 }

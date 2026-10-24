@@ -344,20 +344,9 @@ window.spustZivyAdminRadarUzivatelu = () => {
 
         const uzivatele = [];
         const spravci = [];
-        const MASTER_LIGY = ['Chance Liga', 'Premier League', 'Liga mistrů', 'MS ve fotbale', 'Tipsport Extraliga', 'MS v hokeji'];
-        const liveCounts = {};
-        MASTER_LIGY.forEach(l => { liveCounts[l] = 0; });
 
         userIds.forEach(uid => {
             const uData = data[uid] || {};
-
-            // 🎯 Počítáme VŠECHNY hráče v lize včetně SuperAdmina
-            MASTER_LIGY.forEach(lName => {
-                const hasLeague = uData.isSuperAdmin === true || (Array.isArray(uData.leagues) && uData.leagues.includes(lName));
-                if (hasLeague) {
-                    liveCounts[lName]++;
-                }
-            });
 
             // 👑 SPRÁVCI PRO LOUTKOVODIČE: Všichni administrátoři i SuperAdmin
             if (uData.isAdmin === true || uData.isSuperAdmin === true) {
@@ -381,12 +370,6 @@ window.spustZivyAdminRadarUzivatelu = () => {
         uzivatele.sort((a, b) => (a.nickname || 'Nový Hráč').localeCompare(b.nickname || 'Nový Hráč', 'cs'));
         spravci.sort((a, b) => (a.nickname || 'Admin').localeCompare(b.nickname || 'Admin', 'cs'));
 
-        // 🎯 STABILNÍ POČÍTADLO: Aktivní hráči s ligou (mimo čekárnu)
-        const aktivniTiperiCount = userIds.filter(uid => {
-            const u = data[uid] || {};
-            return u.isSuperAdmin === true || (Array.isArray(u.leagues) && u.leagues.length > 0);
-        }).length;
-
         window.adminUsersCache = uzivatele;
         window.adminManagersCache = spravci;
 
@@ -394,9 +377,6 @@ window.spustZivyAdminRadarUzivatelu = () => {
             store.adminUsers = uzivatele;
             store.adminManagers = spravci;
             store.adminUsersLoaded = true;
-            store.leaguePlayerCounts = liveCounts;
-            store.communityTotal = aktivniTiperiCount;
-            store.leagueFilterTick++;
         }
 
         // ⚡ OKAMŽITÉ PŘEKRESLENÍ SUPERADMIN PANELU (BEZ F5)

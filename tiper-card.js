@@ -190,11 +190,17 @@ window.renderPlayerProfile = (targetUid, leagueFilter = undefined) => {
         return `${rem.toFixed(2)}rem`;
     };
 
-    const cardNickFontSize = vypocitejPismoKarty(playerNickname);
+    const isBot = Boolean(activeCard?.isBot || serverPlayer?.isBot);
+    const displayCardNickText = isBot ? `🤖 ${playerNickname} (bot)` : playerNickname;
+    const cardNickFontSize = vypocitejPismoKarty(displayCardNickText);
+
+    const displayCardNickHtml = isBot
+        ? `🤖 ${window.escapeHTML(playerNickname)} <span style="font-size: 0.8em; font-weight: normal; color: #9ca3af; margin-left: 2px;">(bot)</span>`
+        : window.escapeHTML(playerNickname);
 
     window.activeTiperCardExport = {
         card: activeCard,
-        nickname: playerNickname,
+        nickname: displayCardNickText,
         crestUrl: crestUrl,
         badgesData: {
             exacts: badgeExacts,
@@ -219,7 +225,7 @@ window.renderPlayerProfile = (targetUid, leagueFilter = undefined) => {
                     </div>
 
                     <div class="tiper-player-info">
-                        <div class="tiper-player-name" style="font-size: ${cardNickFontSize};">${window.escapeHTML(playerNickname)}</div>
+                        <div class="tiper-player-name" style="font-size: ${cardNickFontSize};">${displayCardNickHtml}</div>
                         <div class="tiper-archetype-name">${activeCard.specialization ? activeCard.specialization : activeCard.archetypeName}</div>
                     </div>
 

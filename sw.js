@@ -4,7 +4,7 @@
 // =========================================================================
 
 // 🏷️ JEDINÉ CENTRÁLNÍ MÍSTO PRAVDY PRO VERZI APLIKACE
-const APP_VERSION = 'v1.2.9';
+const APP_VERSION = 'v2.0.0';
 const CACHE_NAME = `tipnito-core-${APP_VERSION}`;
 
 // Statické a neměnné assety (Písma, ikony, externí knihovny z CDN)
@@ -206,18 +206,20 @@ self.addEventListener('push', (event) => {
         payload = { body: event.data ? event.data.text() : '' };
     }
 
-    const title = payload.notification?.title || payload.data?.title || payload.title || 'TIPNI TO!';
-    const body = payload.notification?.body || payload.data?.body || payload.body || 'Pozor, blíží se začátek zápasu!';
+    const title = payload.data?.title || payload.notification?.title || payload.title || 'TIPNI TO!';
+    const body = payload.data?.body || payload.notification?.body || payload.body || 'Pozor, blíží se začátek zápasu!';
     const rawUrl = payload.data?.url || payload.notification?.data?.url || payload.url || '/';
     const targetUrl = new URL(rawUrl, self.location.origin).href;
+    const tag = payload.data?.tag || payload.notification?.tag || 'untipped-match-alert';
 
     const options = {
         body: body,
         icon: '/img/favicon192.png',
         badge: '/img/favicon192.png',
-        vibrate: [200, 100, 200],
-        tag: payload.notification?.tag || 'untipped-match-alert',
+        vibrate: [300, 150, 300],
+        tag: tag,
         renotify: true,
+        silent: false,
         data: { url: targetUrl }
     };
 

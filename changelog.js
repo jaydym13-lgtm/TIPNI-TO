@@ -4,6 +4,34 @@
 
 export const CHANGELOG = [
     {
+        id: "cl_2026_10_24_ochrana_neulozenych_tipu",
+        type: "FEATURE",
+        datetime: "2026-10-24 16:10:00",
+        title: "🛡️ Ochrana před ztrátou tipů & Chytré tlačítko v liště",
+        desc: "Konec nechtěně zapomenutých tipů! Horní tlačítko ZAPSAT VŠE se teď při navoleném skóre okamžitě zbarví do varovné oranžové barvy a přehledně ukáže počet neuložených tipů (např. 💾 ULOŽIT (3)), případně upozorní na nekompletní zápas (⚠️ DOKONČI). Pokud navíc telefon rovnou zamkneš nebo přepneš do jiné aplikace dřív, než stihneš kliknout na tlačítko, aplikace při zhasnutí displeje automaticky a tiše odešle všechny kompletně vyplněné tipy na server za tebe!"
+    },
+    {
+        id: "cl_2026_10_24_particky_vychozi_a_prejmenovani",
+        type: "FEATURE",
+        datetime: "2026-10-24 16:09:00",
+        title: "👥 Soukromé partičky",
+        desc: "Byly vytvořeny soukromé partičky pro větší pohodlí! Admin (správce) partičky ti pošle tajný klíč a přes něj se připojíš přímo do skupiny. Můžeš tipovat i bez skupiny, je tu totiž globální liga pro každou soutěž! Pomocí hvězdičky ⭐ si můžeš jako výchozí zobrazení trvale nastavit libovolnou svou partu, ale i Celou ligu."
+    },
+    {
+        id: "cl_2026_10_24_tipni_cup_arena_playoff",
+        type: "IMPROVEMENT",
+        datetime: "2026-10-24 16:08:00",
+        title: "🏆 Tipni Cup: 3 postupová pásma v aréně",
+        desc: "Pohár Tipni Cup byl upraven, byly zrušeny skupiny a místo toho máme skupinu jednu, ta je rozdělena do 3 postupových pásem, s univerzálním vzorcem pro různý počet hráčů! Špička tabulky získá 👑 Královské volno (přímý postup do hlavní fáze pavouka se 2 volnými koly), střed tabulky má ⭐ Pohárové volno (nasazení do 2. předkola) a spodní příčky bojují od 1. předkola. V přehledu arény teď přesně vidíš, do které fáze se kvalifikuješ. Zároveň připomínám, že Tipni Cup je otevřený celoligový šampionát pro všechny tipéry soutěže dohromady (bez ohledu na soukromé party) a vyřazovací duely se hrají na 2 kola (součet bodů z odvet) s Grand Finále na 1 zápas."
+    },
+    {
+        id: "cl_2026_10_24_live_minuty_zapasu",
+        type: "FEATURE",
+        datetime: "2026-10-24 16:07:00",
+        title: "⏱️ Přesné herní minuty během LIVE přenosů",
+        desc: "Během rozehraných zápasů už na kartách neuvidíš jen statický nápis „LIVE“, ale přímo reálný herní čas utkání v reálném čase! U fotbalu uvidíš běžící minutu (např. 14', 78' či POLOČAS), u hokeje stav třetiny nebo přestávku. Máš tak okamžitý přehled, kolik času do konce utkání zbývá."
+    },
+    {
         id: "cl_2026_09_18_hokej_ot_a_minusy",
         type: "FIX",
         datetime: "2026-09-18 09:05:00",

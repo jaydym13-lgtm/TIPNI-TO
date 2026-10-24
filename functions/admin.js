@@ -106,8 +106,8 @@ const manageUserPermissionsCF = onCall(async (request) => {
 
 // 🌪️ FUNKCE 2: Nuclear Purge
 const purgeUserAbsoluteCF = onCall(async (request) => {
-  if (!request.auth || (!request.auth.token.isAdmin && !request.auth.token.isSuperAdmin)) {
-    throw new HttpsError("permission-denied", "Pouze prověřený admin smí ukládat proxy data přes loutkovodiče!");
+  if (!request.auth || !request.auth.token.isSuperAdmin) {
+    throw new HttpsError("permission-denied", "Pouze Super Admin má oprávnění trvale vymazat uživatele!");
   }
 
   const { targetUid } = request.data;
@@ -167,7 +167,7 @@ const saveProxyDataCF = onCall({
   const targetDoc = await db.collection("users").doc(targetUid).get();
   if (targetDoc.exists) {
     const tData = targetDoc.data() || {};
-    if (tData.isSuperAdmin === true) {
+    if (!isCallerSuperAdmin && tData.isSuperAdmin === true) {
       throw new HttpsError("permission-denied", "Účet Super Admina nelze ovládat přes Loutkovodiče!");
     }
     if (!isCallerSuperAdmin && (tData.adminLeagues || []).includes(leagueName)) {
@@ -434,8 +434,8 @@ const updateMatchDateCF = onCall({
   cors: true,
   secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
 }, async (request) => {
-  if (!request.auth || (!request.auth.token.isAdmin && !request.auth.token.isSuperAdmin)) {
-    throw new HttpsError("permission-denied", "Pouze administrátor smí měnit termín zápasu!");
+  if (!request.auth || !request.auth.token.isSuperAdmin) {
+    throw new HttpsError("permission-denied", "Pouze Super Admin smí měnit termín zápasu!");
   }
 
   const { leagueName, matchId, newDateIso } = request.data;
@@ -521,8 +521,8 @@ const saveMatchOddsCF = onCall({
   cors: true,
   secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
 }, async (request) => {
-  if (!request.auth || (!request.auth.token.isAdmin && !request.auth.token.isSuperAdmin)) {
-    throw new HttpsError("permission-denied", "Pouze administrátor smí zadávat kurzy zápasů!");
+  if (!request.auth || !request.auth.token.isSuperAdmin) {
+    throw new HttpsError("permission-denied", "Pouze Super Admin smí zadávat kurzy zápasů!");
   }
 
   const { leagueName, matchId, odds } = request.data;
@@ -630,13 +630,114 @@ const saveMatchOddsCF = onCall({
   }
 });
 
+// 🏆 FUNKCE 11a: Ruční uložení / oprava výsledku zápasu ze SuperAdminu (Firestore + R2 + Puls + Přepočet)
+const saveMatchResultCF = onCall({
+  cors: true,
+  secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
+}, async (request) => {
+  if (!request.auth || !request.auth.token.isSuperAdmin) {
+    throw new HttpsError("permission-denied", "Pouze Super Admin smí zadávat a opravovat výsledky zápasů!");
+  }
+
+  const { leagueName, matchId, vysledek_domaci, vysledek_hoste, postup } = request.data;
+  const sezonaId = request.data.sezonaId || DEFAULT_SEASON_ID;
+
+  if (!leagueName || !matchId || vysledek_domaci === undefined || vysledek_hoste === undefined) {
+    throw new HttpsError("invalid-argument", "Chybí název ligy, ID zápasu nebo výsledné skóre!");
+  }
+
+  const gDom = parseInt(vysledek_domaci, 10);
+  const gHos = parseInt(vysledek_hoste, 10);
+  if (isNaN(gDom) || isNaN(gHos)) {
+    throw new HttpsError("invalid-argument", "Výsledné skóre musí být platná čísla!");
+  }
+
+  const cistyPostup = typeof postup === "string" ? postup.trim().toLowerCase() : "";
+
+  try {
+    const ligaKlic = leagueName.replace(/ /g, "_");
+
+    // 1. Zápis do Firestore
+    const matchRef = db.collection("ligy").doc(leagueName)
+      .collection("sezony").doc(sezonaId)
+      .collection("zapasy").doc(matchId);
+
+    const matchUpdate = {
+      vysledek_domaci: gDom,
+      vysledek_hoste: gHos,
+      postup: cistyPostup,
+      apiStatus: "FINISHED"
+    };
+    await matchRef.set(matchUpdate, { merge: true });
+
+    // 2. Přepis přímo v rozpis.json na Cloudflare R2
+    const r2Client = new S3Client({
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      },
+      region: "auto",
+    });
+
+    const rozpisKey = `sezony/${sezonaId}/${ligaKlic}/rozpis.json`;
+    try {
+      const getRes = await r2Client.send(new GetObjectCommand({
+        Bucket: "tipni-to-data",
+        Key: rozpisKey
+      }));
+      const rawText = await getRes.Body.transformToString();
+      const rozpisObj = JSON.parse(rawText);
+
+      if (rozpisObj && rozpisObj.zapasyMapa && rozpisObj.zapasyMapa[matchId]) {
+        rozpisObj.zapasyMapa[matchId].vysledek_domaci = gDom;
+        rozpisObj.zapasyMapa[matchId].vysledek_hoste = gHos;
+        rozpisObj.zapasyMapa[matchId].postup = cistyPostup;
+        rozpisObj.zapasyMapa[matchId].apiStatus = "FINISHED";
+        rozpisObj.aktualizovano = new Date().toISOString();
+
+        await r2Client.send(new PutObjectCommand({
+          Bucket: "tipni-to-data",
+          Key: rozpisKey,
+          Body: JSON.stringify(rozpisObj),
+          ContentType: "application/json",
+          CacheControl: "no-cache, no-store, must-revalidate"
+        }));
+        console.log(`✅ R2 SYNC: Výsledek zápasu ${matchId} (${gDom}:${gHos} ${cistyPostup}) úspěšně zapsán do rozpis.json.`);
+      }
+    } catch (e) {
+      console.warn("Nepodařilo se upravit rozpis.json na R2:", e.message);
+    }
+
+    // 3. Inkrementace verzeRozpisu v pulsu a RTDB maják
+    const pulsRef = db.collection("ligy").doc(leagueName).collection("stav").doc("puls");
+    await pulsRef.set({
+      verzeRozpisu: admin.firestore.FieldValue.increment(1),
+      aktualizovano: admin.firestore.Timestamp.now()
+    }, { merge: true });
+
+    await cinkniRtdbMajak(leagueName, "rozpis");
+
+    // 4. Okamžitá výzva botovi k přepočtu tabulek
+    await vyzviBotaKPrepoctu(leagueName);
+
+    return { 
+      success: true, 
+      message: `Výsledek zápasu (${gDom}:${gHos}${cistyPostup ? 'p' : ''}) úspěšně uložen do DB, na R2 a přepočet zahájen!` 
+    };
+  } catch (error) {
+    console.error("Chyba při ručním zápisu výsledku zápasu:", error);
+    throw new HttpsError("internal", error.message);
+  }
+});
+
 // 🗑️ FUNKCE 11b: Ruční smazání kurzu zápasu (Firestore + rozpis.json + central_odds.json)
 const deleteMatchOddsCF = onCall({
   cors: true,
   secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
 }, async (request) => {
-  if (!request.auth || (!request.auth.token.isAdmin && !request.auth.token.isSuperAdmin)) {
-    throw new HttpsError("permission-denied", "Pouze administrátor smí mazat kurzy!");
+  if (!request.auth || !request.auth.token.isSuperAdmin) {
+    throw new HttpsError("permission-denied", "Pouze Super Admin smí mazat kurzy!");
   }
 
   const { leagueName, matchId } = request.data;
@@ -734,8 +835,8 @@ const deleteMatchCF = onCall({
   cors: true,
   secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
 }, async (request) => {
-  if (!request.auth || (!request.auth.token.isAdmin && !request.auth.token.isSuperAdmin)) {
-    throw new HttpsError("permission-denied", "Pouze administrátor smí mazat zápasy!");
+  if (!request.auth || !request.auth.token.isSuperAdmin) {
+    throw new HttpsError("permission-denied", "Pouze Super Admin smí mazat zápasy!");
   }
 
   const { leagueName, matchId } = request.data;
@@ -807,8 +908,8 @@ const toggleMatchPostponedCF = onCall({
   cors: true,
   secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
 }, async (request) => {
-  if (!request.auth || (!request.auth.token.isAdmin && !request.auth.token.isSuperAdmin)) {
-    throw new HttpsError("permission-denied", "Pouze administrátor smí měnit stav odložení zápasu!");
+  if (!request.auth || !request.auth.token.isSuperAdmin) {
+    throw new HttpsError("permission-denied", "Pouze Super Admin smí měnit stav odložení zápasu!");
   }
 
   const { leagueName, matchId, isPostponed } = request.data;
@@ -886,8 +987,8 @@ const toggleTopMatchCF = onCall({
   cors: true,
   secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
 }, async (request) => {
-  if (!request.auth || (!request.auth.token.isAdmin && !request.auth.token.isSuperAdmin)) {
-    throw new HttpsError("permission-denied", "Pouze administrátor smí měnit TOP zápas!");
+  if (!request.auth || !request.auth.token.isSuperAdmin) {
+    throw new HttpsError("permission-denied", "Pouze Super Admin smí měnit TOP zápas!");
   }
 
   const { leagueName, matchId } = request.data;
@@ -988,8 +1089,8 @@ const toggleTopMatchCF = onCall({
 
 // 🚚 FUNKCE 14: Jednorázová migrace všech uživatelů do RTDB admin_roster
 const syncAllUsersToRtdbCF = onCall({ cors: true }, async (request) => {
-  if (!request.auth || (!request.auth.token.isAdmin && !request.auth.token.isSuperAdmin)) {
-    throw new HttpsError("permission-denied", "Pouze prověřený admin smí synchronizovat uživatele!");
+  if (!request.auth || !request.auth.token.isSuperAdmin) {
+    throw new HttpsError("permission-denied", "Pouze Super Admin smí synchronizovat uživatele!");
   }
 
   try {
@@ -1025,6 +1126,11 @@ const deleteMyAccountCF = onCall({ cors: true }, async (request) => {
   }
 
   const uid = request.auth.uid;
+
+  // 🛡️ SYSTÉMOVÝ ŠTÍT: SuperAdmin účet je trvale chráněn proti nechtěnému smazání z aplikace
+  if (uid === "tfLmfp1twLbcFsxWrgNkZ7iQRC22" || request.auth.token.isSuperAdmin === true) {
+    throw new HttpsError("failed-precondition", "Účet SuperAdmina je systémově chráněn a nelze jej smazat!");
+  }
 
   try {
     const shortId = uid.slice(0, 4).toUpperCase();
@@ -1069,6 +1175,358 @@ const deleteMyAccountCF = onCall({ cors: true }, async (request) => {
   }
 });
 
+// 👥 FUNKCE 16: Správa soukromých skupin SuperAdminem (RTDB Zero-Cost Engine)
+const adminManageGroupCF = onCall({
+  cors: true,
+  secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
+}, async (request) => {
+  if (!request.auth || !request.auth.token.isSuperAdmin) {
+    throw new HttpsError("permission-denied", "Pouze Super Admin má právo na vládní správu skupin!");
+  }
+
+  const { action, leagueName, nazev, groupId, targetUid, status } = request.data || {};
+  const sezonaId = request.data?.sezonaId || DEFAULT_SEASON_ID;
+
+  if (!action) {
+    throw new HttpsError("invalid-argument", "Chybí požadovaná akce!");
+  }
+
+  const KOD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  function vygenerujKod() {
+    let kod = "";
+    for (let i = 0; i < 6; i++) {
+      kod += KOD_CHARS.charAt(Math.floor(Math.random() * KOD_CHARS.length));
+    }
+    return kod;
+  }
+
+  try {
+    const { S3Client, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+    const r2Client = new S3Client({
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      },
+      region: "auto",
+    });
+    const R2_BUCKET = process.env.R2_BUCKET_NAME || "tipni-to-data";
+    const ligaKlic = String(leagueName || "").replace(/ /g, "_");
+
+    // Získání spolehlivé RTDB instance
+    const { getDatabase } = require("firebase-admin/database");
+    const rtdb = getDatabase();
+
+    // Lokální maják pro bota
+    const cinkniMajak = async () => {
+      try {
+        await rtdb.ref(`system/leagues_pulse/${ligaKlic}`).set({
+          ts: Date.now(),
+          source: "admin",
+          type: "groups",
+          league: leagueName
+        });
+      } catch (e) {}
+
+      if (RENDER_BOT_URL) {
+        try {
+          const secretParam = BOT_SECRET ? `&key=${BOT_SECRET}` : "";
+          fetch(`${RENDER_BOT_URL}/recalculate?league=${encodeURIComponent(leagueName)}${secretParam}`, {
+            signal: AbortSignal.timeout(5000)
+          }).catch(() => {});
+        } catch (e) {}
+      }
+    };
+
+    // ➕ AKCE 1: ZALOŽENÍ NOVÉ PARTIČKY DO RTDB
+    if (action === "create") {
+      if (!leagueName || !nazev || !nazev.trim()) {
+        throw new HttpsError("invalid-argument", "Musíš zadat ligu i název skupiny!");
+      }
+      const cistyNazev = nazev.trim();
+      const cleanNazev = cistyNazev.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      let kod = vygenerujKod();
+      let pokus = 0;
+      while (pokus < 10) {
+        const exist = await rtdb.ref(`skupiny/${sezonaId}/${ligaKlic}/${kod}`).get();
+        if (!exist.exists()) break;
+        kod = vygenerujKod();
+        pokus++;
+      }
+
+      const novaSkupina = {
+        id: kod,
+        kod: kod,
+        nazev: cistyNazev,
+        cleanNazev: cleanNazev,
+        liga: leagueName,
+        sezonaId: sezonaId,
+        autorUid: request.auth.uid,
+        status: status || "ACTIVE",
+        clenove: [request.auth.uid],
+        pocetClenu: 1,
+        createdAt: Date.now(),
+        aktualizovano: Date.now()
+      };
+
+      await rtdb.ref(`skupiny/${sezonaId}/${ligaKlic}/${kod}`).set(novaSkupina);
+
+      // Zápis privátního indexu pro zakládajícího SuperAdmina
+      await rtdb.ref(`user_groups/${request.auth.uid}/${ligaKlic}/${kod}`).set({
+        id: kod,
+        kod: kod,
+        nazev: cistyNazev,
+        liga: leagueName,
+        status: status || "ACTIVE",
+        joinedAt: Date.now()
+      });
+
+      const userRef = db.collection("users").doc(request.auth.uid);
+      const uSnap = await userRef.get();
+      const uData = uSnap.exists ? uSnap.data() : {};
+      const curLeagues = uData.leagues || [];
+      if (!curLeagues.includes(leagueName)) {
+        await userRef.update({ leagues: admin.firestore.FieldValue.arrayUnion(leagueName) });
+      }
+
+      await cinkniMajak();
+      return { success: true, kod: kod, message: `Parta "${cistyNazev}" (kód: ${kod}) úspěšně založena!` };
+    }
+
+    // 👤 AKCE 2: PŘIDÁNÍ HRÁČE / HRÁČŮ DO PARTIČKY V RTDB SE SYNCHRONIZACÍ SOUPISKY
+    if (action === "addMember") {
+      const uidsToAdd = Array.isArray(request.data?.targetUids) 
+        ? request.data.targetUids 
+        : (targetUid ? [targetUid] : []);
+
+      if (!groupId || uidsToAdd.length === 0 || !leagueName) {
+        throw new HttpsError("invalid-argument", "Chybí ID skupiny, hráči nebo liga!");
+      }
+
+      const groupRef = rtdb.ref(`skupiny/${sezonaId}/${ligaKlic}/${groupId}`);
+      const gSnap = await groupRef.get();
+      if (!gSnap.exists()) {
+        throw new HttpsError("not-found", "Skupina nebyla nalezena!");
+      }
+
+      const gData = gSnap.val() || {};
+      const clenove = Array.isArray(gData.clenove) ? gData.clenove : [];
+      const newUids = uidsToAdd.filter(u => !clenove.includes(u));
+
+      if (newUids.length > 0) {
+        const updatedClenove = [...clenove, ...newUids];
+        await groupRef.update({
+          clenove: updatedClenove,
+          pocetClenu: updatedClenove.length,
+          aktualizovano: Date.now()
+        });
+
+        for (const uid of newUids) {
+          await rtdb.ref(`user_groups/${uid}/${ligaKlic}/${groupId}`).set({
+            id: groupId,
+            kod: groupId,
+            nazev: gData.nazev || "Partička",
+            liga: leagueName,
+            status: gData.status || "ACTIVE",
+            joinedAt: Date.now()
+          });
+
+          const userRef = db.collection("users").doc(uid);
+          const uSnap = await userRef.get();
+          if (uSnap.exists) {
+            const curLeagues = uSnap.data()?.leagues || [];
+            if (!curLeagues.includes(leagueName)) {
+              // 1. Zápis do profilu ve Firestore
+              await userRef.update({ leagues: admin.firestore.FieldValue.arrayUnion(leagueName) });
+              
+              // 2. Aktualizace Custom Claims
+              try {
+                await auth.setCustomUserClaims(uid, {
+                  ...((await auth.getUser(uid)).customClaims || {}),
+                  leagues: [...curLeagues, leagueName]
+                });
+              } catch(e) {}
+
+              // 3. RTDB admin_roster synchronizace (SuperAdmin okamžitě vidí zaškrtnutou licenci)
+              try {
+                const rosterRef = rtdb.ref(`admin_roster/${uid}/leagues`);
+                const rSnap = await rosterRef.get();
+                const curRL = rSnap.val() || [];
+                if (!curRL.includes(leagueName)) {
+                  curRL.push(leagueName);
+                  await rosterRef.set(curRL);
+                }
+              } catch(e) {}
+
+              // 4. Registr ligy
+              await db.collection("ligy").doc(leagueName).collection("stav").doc("registrovani")
+                .set({ [uid]: true }, { merge: true }).catch(() => {});
+            }
+          }
+        }
+      }
+
+      await cinkniMajak();
+      return { success: true, message: `Úspěšně přiřazeno ${newUids.length} hráčů do party!` };
+    }
+
+    // ❌ AKCE 3: ODEBRÁNÍ HRÁČE Z PARTIČKY V RTDB S INTELIGENTNÍM ÚKLIDEM (AUTO-PRUNE)
+    if (action === "removeMember") {
+      if (!groupId || !targetUid || !leagueName) {
+        throw new HttpsError("invalid-argument", "Chybí ID skupiny, UID hráče nebo liga!");
+      }
+
+      const groupRef = rtdb.ref(`skupiny/${sezonaId}/${ligaKlic}/${groupId}`);
+      const gSnap = await groupRef.get();
+      if (gSnap.exists()) {
+        const gData = gSnap.val() || {};
+        const clenove = Array.isArray(gData.clenove) ? gData.clenove : [];
+        const updatedClenove = clenove.filter(u => u !== targetUid);
+        await groupRef.update({
+          clenove: updatedClenove,
+          pocetClenu: updatedClenove.length,
+          aktualizovano: Date.now()
+        });
+      }
+
+      await rtdb.ref(`user_groups/${targetUid}/${ligaKlic}/${groupId}`).remove();
+
+      // 🧹 AUTO-PRUNE: Kontrola, zda hráč v této lize má ještě nějakou jinou partičku
+      const otherGroupsSnap = await rtdb.ref(`user_groups/${targetUid}/${ligaKlic}`).get();
+      const hasOtherGroups = otherGroupsSnap.exists() && Object.keys(otherGroupsSnap.val() || {}).length > 0;
+
+      let licenceOdebrana = false;
+
+      if (!hasOtherGroups) {
+        // Zkontrolujeme, zda v této lize hráč reálně někdy natipoval nebo má bonusy
+        const userSezonaRef = db.collection("users").doc(targetUid).collection("sezony").doc(sezonaId);
+        const sezonaSnap = await userSezonaRef.get();
+        const sezonaData = sezonaSnap.exists ? sezonaSnap.data() : {};
+        const ligaData = sezonaData?.souteze?.[ligaKlic] || {};
+        const maTipy = ligaData.tipy && Object.keys(ligaData.tipy).length > 0;
+        const maBonusy = Boolean(ligaData.bonusy?.vitez || ligaData.bonusy?.strelec || ligaData.bonusy?.kanadske);
+
+        // Pokud nemá jinou partu a v soutěži vůbec netipoval, vyčistíme licenci i všechny pozůstatky
+        if (!maTipy && !maBonusy) {
+          // 1. Odstranění licence z profilu ve Firestore
+          await db.collection("users").doc(targetUid).update({
+            leagues: admin.firestore.FieldValue.arrayRemove(leagueName)
+          }).catch(() => {});
+
+          // 2. Odstranění z registru ligy
+          await db.collection("ligy").doc(leagueName).collection("stav").doc("registrovani").set({
+            [targetUid]: admin.firestore.FieldValue.delete()
+          }, { merge: true }).catch(() => {});
+
+          // 3. Smazání prázdného pahýlu ze sezónního dokumentu
+          if (sezonaData?.souteze?.[ligaKlic]) {
+            await userSezonaRef.update({
+              [`souteze.${ligaKlic}`]: admin.firestore.FieldValue.delete()
+            }).catch(() => {});
+          }
+
+          // 4. Synchronizace RTDB admin_roster (ihned zmizí fajfka v administraci)
+          try {
+            const rosterRef = rtdb.ref(`admin_roster/${targetUid}/leagues`);
+            const rSnap = await rosterRef.get();
+            if (rSnap.exists()) {
+              const curRL = rSnap.val() || [];
+              const updatedRL = curRL.filter(l => l !== leagueName);
+              await rosterRef.set(updatedRL);
+            }
+          } catch (rtdbErr) {
+            console.warn("RTDB roster sync error při odebrání:", rtdbErr.message);
+          }
+
+          // 5. Zneplatnění a aktualizace Auth Custom Claims
+          try {
+            const uAuth = await auth.getUser(targetUid);
+            const curClaims = uAuth.customClaims || {};
+            const updatedClaimsLeagues = (curClaims.leagues || []).filter(l => l !== leagueName);
+            await auth.setCustomUserClaims(targetUid, {
+              ...curClaims,
+              leagues: updatedClaimsLeagues
+            });
+            await auth.revokeRefreshTokens(targetUid);
+          } catch (authErr) {
+            console.warn("Auth claims update error:", authErr.message);
+          }
+
+          licenceOdebrana = true;
+        }
+      }
+
+      await cinkniMajak();
+      return { 
+        success: true, 
+        message: licenceOdebrana 
+          ? "Hráč byl odebrán z party a jelikož v soutěži netipoval, byla mu automaticky odebrána i licence!" 
+          : "Hráč byl odebrán z party!" 
+      };
+    }
+
+    // 🗑️ AKCE 4: SMAZÁNÍ PARTIČKY (RTDB + R2)
+    if (action === "deleteGroup") {
+      if (!groupId || !leagueName) {
+        throw new HttpsError("invalid-argument", "Chybí ID skupiny nebo liga!");
+      }
+
+      const gSnap = await rtdb.ref(`skupiny/${sezonaId}/${ligaKlic}/${groupId}`).get();
+      if (gSnap.exists()) {
+        const clenove = gSnap.val()?.clenove || [];
+        for (const mUid of clenove) {
+          await rtdb.ref(`user_groups/${mUid}/${ligaKlic}/${groupId}`).remove();
+        }
+      }
+
+      await rtdb.ref(`skupiny/${sezonaId}/${ligaKlic}/${groupId}`).remove();
+
+      try {
+        await r2Client.send(new DeleteObjectCommand({
+          Bucket: R2_BUCKET,
+          Key: `sezony/${sezonaId}/${ligaKlic}/skupiny/${groupId}.json`
+        }));
+      } catch(e) {}
+
+      await cinkniMajak();
+      return { success: true, message: `Skupina ${groupId} byla kompletně smazána!` };
+    }
+
+    // 👑 AKCE 5: PŘEDÁNÍ ROLE ADMINA PARTIČKY V RTDB
+    if (action === "setGroupAdmin") {
+      if (!groupId || !targetUid || !leagueName) {
+        throw new HttpsError("invalid-argument", "Chybí ID skupiny, nový admin nebo liga!");
+      }
+
+      const groupRef = rtdb.ref(`skupiny/${sezonaId}/${ligaKlic}/${groupId}`);
+      const gSnap = await groupRef.get();
+      if (!gSnap.exists()) {
+        throw new HttpsError("not-found", "Skupina nebyla nalezena!");
+      }
+
+      const gData = gSnap.val() || {};
+      const clenove = Array.isArray(gData.clenove) ? gData.clenove : [];
+      if (!clenove.includes(targetUid)) {
+        throw new HttpsError("failed-precondition", "Nový admin musí být členem této partičky!");
+      }
+
+      await groupRef.update({
+        autorUid: targetUid,
+        aktualizovano: Date.now()
+      });
+
+      await cinkniMajak();
+      return { success: true, message: "Správce partičky byl úspěšně změněn!" };
+    }
+
+    throw new HttpsError("invalid-argument", `Neznámá akce: ${action}`);
+  } catch (error) {
+    console.error("Chyba v adminManageGroupCF:", error);
+    throw new HttpsError("internal", error.message);
+  }
+});
+
 module.exports = {
   manageUserPermissionsCF,
   purgeUserAbsoluteCF,
@@ -1077,10 +1535,12 @@ module.exports = {
   transferUserDataCF,
   updateMatchDateCF,
   saveMatchOddsCF,
+  saveMatchResultCF,
   deleteMatchOddsCF,
   deleteMatchCF,
   toggleMatchPostponedCF,
   toggleTopMatchCF,
   syncAllUsersToRtdbCF,
-  deleteMyAccountCF
+  deleteMyAccountCF,
+  adminManageGroupCF
 };

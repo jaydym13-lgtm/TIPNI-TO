@@ -30,18 +30,19 @@ export const inicializujDarkMode = () => {
 
 // 👁️ CENTRÁLNÍ UI KOMPONENT PRO GLOBÁLNÍ MODÁLNÍ OKNA
 export const openGlobalUiModal = (title, contentHtml) => {
-    const staryOverlay = document.querySelector('.spy-modal-overlay');
+    // 🛡️ Maže pouze dočasně vytvořená okna, nikdy nesahá na statické modály v index.html
+    const staryOverlay = document.querySelector('.dynamic-global-modal');
     if (staryOverlay) staryOverlay.remove();
 
     const overlay = document.createElement('div');
-    overlay.className = 'spy-modal-overlay';
+    overlay.className = 'spy-modal-overlay dynamic-global-modal';
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
     
     overlay.innerHTML = `
         <div class="spy-modal-box">
             <div class="spy-modal-header">
                 <h3>${title}</h3>
-                <button class="spy-modal-close" onclick="this.closest('.spy-modal-overlay').remove()">✕</button>
+                <button class="spy-modal-close" onclick="this.closest('.dynamic-global-modal').remove()">✕</button>
             </div>
             <div class="spy-modal-body">
                 ${contentHtml}

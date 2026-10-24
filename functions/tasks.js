@@ -3,7 +3,7 @@
 // =========================================================================
 
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
-const { db, tasksClient, DEFAULT_SEASON_ID, RENDER_BOT_URL, BOT_SECRET } = require("./init");
+const { db, admin, tasksClient, DEFAULT_SEASON_ID, RENDER_BOT_URL, BOT_SECRET } = require("./init");
 const { S3Client, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getMessaging } = require("firebase-admin/messaging");
 
@@ -28,7 +28,7 @@ async function naplanujBudikProKickoff(kickoffMs) {
         httpMethod: "POST",
         url: url,
         headers: { "Content-Type": "application/json" },
-        body: Buffer.from(JSON.stringify({ kickoffMs, secret: BOT_SECRET })).toString("base64")
+        body: Buffer.from(JSON.stringify({ kickoffMs, window: 60, secret: BOT_SECRET })).toString("base64")
       },
       scheduleTime: {
         seconds: Math.floor(targetNotifMs / 1000)
@@ -43,7 +43,35 @@ async function naplanujBudikProKickoff(kickoffMs) {
     }
   }
 
-  // 2. Budík T-2 minuty (probuzení Renderu a odpálení udržovacího řetězu)
+  // 2. Budík T-7 minut (last-minute upozornění nenatipovaným)
+  const targetNotif7Ms = kickoffMs - (7 * 60 * 1000);
+  if (targetNotif7Ms > nowMs) {
+    const taskId = `task-notif7-${kickoffMs}`;
+    const taskName = `${parent}/tasks/${taskId}`;
+    const url = `https://${location}-${projectId}.cloudfunctions.net/preMatchExecutionTask`;
+
+    const task = {
+      name: taskName,
+      httpRequest: {
+        httpMethod: "POST",
+        url: url,
+        headers: { "Content-Type": "application/json" },
+        body: Buffer.from(JSON.stringify({ kickoffMs, window: 7, secret: BOT_SECRET })).toString("base64")
+      },
+      scheduleTime: {
+        seconds: Math.floor(targetNotif7Ms / 1000)
+      }
+    };
+
+    try {
+      await tasksClient.createTask({ parent, task });
+      console.log(`⏰ CLOUD TASKS: Last-minute budík T-7 naplánován na ${new Date(targetNotif7Ms).toLocaleTimeString("cs-CZ")}`);
+    } catch (err) {
+      if (err.code !== 6) console.error("❌ CLOUD TASKS CHYBA (T-7):", err.message);
+    }
+  }
+
+  // 3. Budík T-2 minuty (probuzení Renderu a odpálení udržovacího řetězu)
   const targetWakeupMs = kickoffMs - (2 * 60 * 1000);
   if (targetWakeupMs > nowMs) {
     const taskId = `task-wakeup-${kickoffMs}`;
@@ -68,6 +96,32 @@ async function naplanujBudikProKickoff(kickoffMs) {
       console.log(`⏰ CLOUD TASKS: Wakeup budík bota T-2 naplánován na ${new Date(targetWakeupMs).toLocaleTimeString("cs-CZ")}`);
     } catch (err) {
       if (err.code !== 6) console.error("❌ CLOUD TASKS CHYBA (T-2):", err.message);
+    }
+  }
+// 4. Budík T-0: Okamžitý serverový zámek výkopu do RTDB (CESTA A)
+  if (kickoffMs > nowMs) {
+    const taskId = `task-lock-${kickoffMs}`;
+    const taskName = `${parent}/tasks/${taskId}`;
+    const url = `https://${location}-${projectId}.cloudfunctions.net/kickoffLockExecutionTask`;
+
+    const task = {
+      name: taskName,
+      httpRequest: {
+        httpMethod: "POST",
+        url: url,
+        headers: { "Content-Type": "application/json" },
+        body: Buffer.from(JSON.stringify({ kickoffMs, secret: BOT_SECRET })).toString("base64")
+      },
+      scheduleTime: {
+        seconds: Math.floor(kickoffMs / 1000)
+      }
+    };
+
+    try {
+      await tasksClient.createTask({ parent, task });
+      console.log(`⏰ CLOUD TASKS: Výkopový budík T-0 (Lock) naplánován na ${new Date(kickoffMs).toLocaleTimeString("cs-CZ")}`);
+    } catch (err) {
+      if (err.code !== 6) console.error("❌ CLOUD TASKS CHYBA (T-0):", err.message);
     }
   }
 }
@@ -141,12 +195,15 @@ const preMatchExecutionTask = onRequest({
   secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
 }, async (req, res) => {
   // 🔒 KONTROLA BEZPEČNOSTNÍHO TOKENU
-  if (BOT_SECRET && req.body?.secret !== BOT_SECRET) {
+  const incomingSecret = req.body?.secret || req.headers?.["x-bot-secret"];
+  if (BOT_SECRET && incomingSecret !== BOT_SECRET) {
     res.status(401).send("Unauthorized");
     return;
   }
   const kickoffMs = req.body?.kickoffMs;
-  console.log(`🔔 EXEKUCE T-62: Zahajuji kontrolu a odesílání notifikací před výkopem v ${new Date(kickoffMs).toLocaleTimeString("cs-CZ")}...`);
+  const windowMinutes = req.body?.window || 60;
+  const isT7 = (windowMinutes === 7);
+  console.log(`🔔 EXEKUCE T-${isT7 ? '7' : '62'}: Zahajuji kontrolu a odesílání notifikací před začátkem zápasů v ${new Date(kickoffMs).toLocaleTimeString("cs-CZ")}...`);
 
   try {
     const r2 = new S3Client({
@@ -269,14 +326,26 @@ const preMatchExecutionTask = onRequest({
         const icon = getSportIcon(ligaNazev);
         const zapasyVLize = ligyGroup[ligaNazev];
 
-        title = `${icon} ${ligaNazev}: Nezapomeň natipovat!`;
-        body = zapasyVLize.length === 1
-          ? `${zapasyVLize[0].domaci} – ${zapasyVLize[0].hoste} začíná za 60 minut a nemáš natipováno!`
-          : `Za 60 minut začíná ${zapasyVLize.length} zápasů bez tvého tipu!`;
+        if (isT7) {
+          title = `🚨 ${icon} ${ligaNazev}: Začátek cca za 7 minut!`;
+          body = zapasyVLize.length === 1
+            ? `${zapasyVLize[0].domaci} – ${zapasyVLize[0].hoste} začíná přibližně za 7 minut! Rychle doplň svůj tip.`
+            : `V soutěži ${ligaNazev} začíná přibližně za 7 minut celkem ${zapasyVLize.length} zápasů a stále u nich nemáš zapsaný tip!`;
+        } else {
+          title = `${icon} ${ligaNazev}: Nezapomeň natipovat!`;
+          body = zapasyVLize.length === 1
+            ? `${zapasyVLize[0].domaci} – ${zapasyVLize[0].hoste} začíná přibližně za hodinu a stále nemáš natipováno!`
+            : `V soutěži ${ligaNazev} ti chybí tip na ${zapasyVLize.length} zápasů, které začínají přibližně za hodinu.`;
+        }
       } else {
-        title = `🏆 Nezapomeň natipovat (${totalUntippedCount} zápasů ve ${unikatniLigy.length} soutěžích)`;
-        const rozpisText = unikatniLigy.map(l => `${getSportIcon(l)} ${l} (${ligyGroup[l].length})`).join(" • ");
-        body = `Za 60 minut začínají zápasy bez tipu: ${rozpisText}`;
+        const rozpisText = unikatniLigy.map(l => `${ligyGroup[l].length}× ${l}`).join(", ");
+        if (isT7) {
+          title = `🚨 Last minute tipy: Začínáme cca za 7 minut!`;
+          body = `Rychle doplň tipy! Přibližně za 7 minut startuje: ${rozpisText}.`;
+        } else {
+          title = `🏆 Nezapomeň natipovat (${totalUntippedCount} zápasů ve ${unikatniLigy.length} soutěžích)`;
+          body = `Přibližně za hodinu začínají zápasy bez tipu: ${rozpisText}.`;
+        }
       }
 
       const leagueParam = encodeURIComponent(primaryLeague.replace(/ /g, "_"));
@@ -284,26 +353,34 @@ const preMatchExecutionTask = onRequest({
 
       const resp = await messaging.sendEachForMulticast({
         tokens: tokens,
-        notification: { title, body },
+        notification: {
+          title: title,
+          body: body
+        },
+        data: {
+          title: title,
+          body: body,
+          url: targetUrl,
+          league: primaryLeague,
+          tag: `untipped-match-alert-${windowMinutes}`
+        },
         webpush: {
           headers: {
             Urgency: "high",
             urgency: "high",
-            TTL: "3600",
-            Topic: "prematch-alert"
+            TTL: String(isT7 ? 420 : 3600)
           },
           notification: {
-            title,
-            body,
+            title: title,
+            body: body,
             icon: `${APP_BASE_URL}/img/favicon192.png`,
             badge: `${APP_BASE_URL}/img/favicon192.png`,
-            vibrate: [200, 100, 200],
-            tag: "untipped-match-alert",
-            requireInteraction: true,
+            vibrate: [300, 150, 300],
+            tag: `untipped-match-alert-${windowMinutes}`,
+            renotify: true,
             data: { url: targetUrl }
           }
-        },
-        data: { url: targetUrl, league: primaryLeague }
+        }
       });
 
       // Úklid neplatných tokenů z R2
@@ -350,6 +427,19 @@ const botWakeupAndKeepAliveTask = onRequest({
 
   const { kickoffMs, iteration = 0 } = req.body || {};
   console.log(`💓 KEEP-ALIVE: Úkol bota aktivován (iterace ${iteration}) v ${new Date().toLocaleTimeString("cs-CZ")}`);
+
+  // 🧹 GILOTINA SKUPIN V T-2 PŘED VÝKOPEM (Aktivace 10+ / Tvrdý výmaz <10)
+  if (iteration === 0) {
+    try {
+      const { evaluateGroupsGuillotine } = require("./groups");
+      const SEZNAM_LIG = ["Chance Liga", "Premier League", "Liga mistrů", "Tipsport Extraliga", "MS v hokeji", "MS ve fotbale"];
+      for (const lName of SEZNAM_LIG) {
+        await evaluateGroupsGuillotine(lName);
+      }
+    } catch (gErr) {
+      console.warn("⚠️ Varování při spuštění gilotiny skupin v T-2:", gErr.message);
+    }
+  }
 
   // 1. HTTP ping na Render /cron pro probuzení nebo reset 15min spánkového časovače
   try {
@@ -470,10 +560,16 @@ async function naplanujBudikyZR2() {
         Key: `sezony/${DEFAULT_SEASON_ID}/${lKlic}/rozpis.json`
       }));
       const rJson = JSON.parse(await res.Body.transformToString());
+      let earliestLeagueMatchMs = Infinity;
+
       Object.values(rJson.zapasyMapa || {}).forEach(z => {
         if (!z.datum || z.apiStatus === "POSTPONED" || z.apiStatus === "FINISHED") return;
         const d = Date.parse(z.datum);
         if (isNaN(d)) return;
+
+        if (d < earliestLeagueMatchMs) {
+          earliestLeagueMatchMs = d;
+        }
 
         const jeLiveStatus = z.apiStatus === "IN_PLAY" || z.apiStatus === "PAUSED";
         const jeVRozmeziHry = (d <= nowMs) && ((nowMs - d) < (3.5 * 60 * 60 * 1000));
@@ -490,6 +586,27 @@ async function naplanujBudikyZR2() {
           uniqueKickoffs.add(d);
         }
       });
+
+      // 🛡️ AUTO-SYNC: Automaticky aktualizujeme pole zacatek v ligovém dokumentu
+      if (earliestLeagueMatchMs !== Infinity) {
+        try {
+          const ligaRef = db.collection("ligy").doc(lName);
+          const ligaSnap = await ligaRef.get();
+          const curZ = ligaSnap.exists ? ligaSnap.data()?.zacatek : null;
+          let curZMs = 0;
+          if (curZ) {
+            curZMs = curZ.toDate ? curZ.toDate().getTime() : (curZ.seconds ? curZ.seconds * 1000 : new Date(curZ).getTime());
+          }
+          if (!curZ || curZMs !== earliestLeagueMatchMs) {
+            await ligaRef.set({
+              zacatek: admin.firestore.Timestamp.fromMillis(earliestLeagueMatchMs)
+            }, { merge: true });
+            console.log(`📅 AUTO-SYNC: Začátek soutěže [${lName}] nastaven na ${new Date(earliestLeagueMatchMs).toLocaleString("cs-CZ")}`);
+          }
+        } catch (syncErr) {
+          console.warn(`Varování auto-sync začátku pro ligu ${lName}:`, syncErr.message);
+        }
+      }
     } catch (e) {}
   }
 
@@ -549,10 +666,76 @@ const rescheduleBudikyManual = onRequest({
   }
 });
 
+// ⚡ TASK HANDLER T-0: Bleskový serverový zápis stavu "PROBÍHÁ" do RTDB přesně v čase výkopu
+const kickoffLockExecutionTask = onRequest({
+  region: "europe-west1",
+  memory: "256MiB",
+  invoker: "public",
+  secrets: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"]
+}, async (req, res) => {
+  const incomingSecret = req.body?.secret || req.headers?.["x-bot-secret"];
+  if (BOT_SECRET && incomingSecret !== BOT_SECRET) {
+    res.status(401).send("Unauthorized");
+    return;
+  }
+  const kickoffMs = req.body?.kickoffMs;
+  if (!kickoffMs) {
+    res.status(400).send("Missing kickoffMs");
+    return;
+  }
+
+  console.log(`🔒 EXEKUCE T-0: Odpálena uzávěrka zápasů s výkopem v ${new Date(kickoffMs).toLocaleTimeString("cs-CZ")}...`);
+
+  try {
+    const r2 = new S3Client({
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      },
+      region: "auto",
+    });
+
+    const R2_BUCKET = process.env.R2_BUCKET_NAME || "tipni-to-data";
+    const SEZNAM_LIG = ["Chance Liga", "Premier League", "Liga mistrů", "Tipsport Extraliga", "MS v hokeji", "MS ve fotbale"];
+    const { getDatabase } = require("firebase-admin/database");
+    const rtdb = getDatabase();
+    const updates = {};
+
+    for (const lName of SEZNAM_LIG) {
+      const lKlic = lName.replace(/ /g, "_");
+      try {
+        const rRes = await r2.send(new GetObjectCommand({
+          Bucket: R2_BUCKET,
+          Key: `sezony/${DEFAULT_SEASON_ID}/${lKlic}/rozpis.json`
+        }));
+        const rJson = JSON.parse(await rRes.Body.transformToString());
+        Object.entries(rJson.zapasyMapa || {}).forEach(([mId, z]) => {
+          if (z.apiStatus === "POSTPONED" || z.vysledek_domaci !== undefined) return;
+          const zMs = Date.parse(z.datum);
+          if (zMs && Math.abs(zMs - kickoffMs) < 15 * 60 * 1000) {
+            updates[`live_ticks/${mId}`] = "PROBÍHÁ";
+          }
+        });
+      } catch (e) {}
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await rtdb.ref().update(updates);
+      console.log(`✅ RTDB WEBSOCKET PUSH: Uzamčeno ${Object.keys(updates).length} zápasů v live_ticks.`);
+    }
+  } catch (err) {
+    console.error("❌ Chyba v kickoffLockExecutionTask:", err);
+  }
+
+  res.status(200).send("OK");
+});
+
 module.exports = {
   togglePushSubscriptionCF,
   preMatchExecutionTask,
   botWakeupAndKeepAliveTask,
+  kickoffLockExecutionTask,
   rescheduleBudikyManual,
   naplanujBudikyZR2,
   naplanujBudikProKickoff,

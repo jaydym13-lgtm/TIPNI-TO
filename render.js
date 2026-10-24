@@ -969,6 +969,69 @@ window.renderScoring = () => {
     }
 };
 
+// 🧮 CENTRÁLNÍ MOZEK ROZPRACOVANÝCH TIPŮ PRO VIZUÁLNÍ MAJÁK A AUTO-FLUSH
+window.prepocitejPocitadlaTipu = () => {
+    const store = Alpine.store('appState');
+    if (!store || store.currentScreen !== 'matchesScreen' || store.matchViewMode === 'results') {
+        if (store) {
+            store.dirtyTipsCount = 0;
+            store.incompleteTipsCount = 0;
+        }
+        return;
+    }
+
+    const container = document.querySelector('#matchesScreen .zebra-container');
+    if (!container) return;
+
+    const leagueName = store.selectedLeague;
+    const isExtraliga = (leagueName === "Tipsport Extraliga");
+    const domaciSelects = container.querySelectorAll('[id^="tip-domaci-"]');
+
+    let dirtyComplete = 0;
+    let incomplete = 0;
+
+    domaciSelects.forEach(selD => {
+        const matchId = selD.id.replace('tip-domaci-', '');
+        const selH = document.getElementById(`tip-hoste-${matchId}`);
+        if (!selH) return;
+
+        const dVal = selD.value;
+        const hVal = selH.value;
+
+        const savedTip = store.mojeTipy?.[matchId];
+        const savedD = savedTip && savedTip.tip_domaci !== undefined && savedTip.tip_domaci !== null && savedTip.tip_domaci !== '' ? String(savedTip.tip_domaci) : '';
+        const savedH = savedTip && savedTip.tip_hoste !== undefined && savedTip.tip_hoste !== null && savedTip.tip_hoste !== '' ? String(savedTip.tip_hoste) : '';
+        const savedPostup = savedTip?.postup || '';
+
+        const zapas = store.rozpisData?.zapasyMapa?.[matchId];
+        const isPlayoff = zapas?.isPlayoff || false;
+        const vyzadujePostup = (isPlayoff && leagueName !== "Liga mistrů") || isExtraliga;
+
+        let postupVal = store.rozvrtaneTipy?.[`${matchId}_postup`] || savedPostup;
+        const hiddenInput = document.getElementById(`playoff-user-val-${matchId}`);
+        if (hiddenInput && hiddenInput.value) postupVal = hiddenInput.value;
+
+        const isModified = (dVal !== savedD) || (hVal !== savedH) || (postupVal !== savedPostup);
+        if (!isModified) return;
+
+        if ((dVal === "" && hVal !== "") || (dVal !== "" && hVal === "")) {
+            incomplete++;
+        } else if (dVal !== "" && hVal !== "") {
+            const dNum = parseInt(dVal, 10);
+            const hNum = parseInt(hVal, 10);
+            if (dNum === hNum && vyzadujePostup && !postupVal) {
+                incomplete++;
+            } else {
+                dirtyComplete++;
+            }
+        }
+    });
+
+    store.dirtyTipsCount = dirtyComplete;
+    store.incompleteTipsCount = incomplete;
+    window.isAppFormDirty = (dirtyComplete > 0 || incomplete > 0);
+};
+
 window.handleUserScoreChange = (matchId, isPlayoff) => {
     const selD = document.getElementById(`tip-domaci-${matchId}`);
     const selH = document.getElementById(`tip-hoste-${matchId}`);
@@ -982,7 +1045,6 @@ window.handleUserScoreChange = (matchId, isPlayoff) => {
     const d = selD.value;
     const h = selH.value;
 
-    // ⚡ Neprůstřelné reaktivní řízení barev přímo přes inline styles (imunní vůči CSS specificitě)
     if (d === '') selD.style.color = '#ef4444';
     else if (savedD !== '' && parseInt(d) === parseInt(savedD)) selD.style.color = '#ffffff';
     else selD.style.color = '#facc15';
@@ -992,22 +1054,24 @@ window.handleUserScoreChange = (matchId, isPlayoff) => {
     else selH.style.color = '#facc15';
 
     const vyzadujeOt = isPlayoff || store?.selectedLeague === "Tipsport Extraliga";
-    if (!vyzadujeOt) return;
-
-    const box = document.getElementById(`playoff-user-box-${matchId}`);
-    if (box) {
-        if (d !== "" && h !== "" && parseInt(d) === parseInt(h)) {
-            box.style.display = 'flex';
-        } else {
-            box.style.display = 'none';
-            const valInput = document.getElementById(`playoff-user-val-${matchId}`);
-            if (valInput) valInput.value = '';
-            const bDom = document.getElementById(`playoff-user-dom-${matchId}`);
-            const bHos = document.getElementById(`playoff-user-hos-${matchId}`);
-            if (bDom) bDom.style.background = '#111827';
-            if (bHos) bHos.style.background = '#111827';
+    if (vyzadujeOt) {
+        const box = document.getElementById(`playoff-user-box-${matchId}`);
+        if (box) {
+            if (d !== "" && h !== "" && parseInt(d) === parseInt(h)) {
+                box.style.display = 'flex';
+            } else {
+                box.style.display = 'none';
+                const valInput = document.getElementById(`playoff-user-val-${matchId}`);
+                if (valInput) valInput.value = '';
+                const bDom = document.getElementById(`playoff-user-dom-${matchId}`);
+                const bHos = document.getElementById(`playoff-user-hos-${matchId}`);
+                if (bDom) bDom.style.background = '#111827';
+                if (bHos) bHos.style.background = '#111827';
+            }
         }
     }
+
+    window.prepocitejPocitadlaTipu();
 };
 
 window.selectPlayoffUser = (matchId, choice) => {
@@ -1046,12 +1110,12 @@ window.selectPlayoffUser = (matchId, choice) => {
 };
 
 // 🪐 A) PRO HRÁČE: HROMADNÉ UKLÁDÁNÍ TIPŮ DO SEZÓNNÍHO MONOLITU REAKTIVNĚ
-window.saveAllUserTips = async (leagueName, event) => {
+window.saveAllUserTips = async (leagueName, event, isSilent = false) => {
     const user = window.auth.currentUser;
     if (!user) return;
 
-if (!navigator.onLine) {
-        window.showToast("⚠️ Jsi offline! Pro hromadné uložení tipů se připoj k internetu.", true);
+    if (!navigator.onLine) {
+        if (!isSilent) window.showToast("⚠️ Jsi offline! Pro hromadné uložení tipů se připoj k internetu.", true);
         return;
     }
 
@@ -1114,18 +1178,18 @@ if (!navigator.onLine) {
     });
 
     if (citacNovychTipu === 0) {
-        window.showToast("⚠️ Navol nejprve v roletkách nějaké výsledky!", true);
+        if (!isSilent) window.showToast("⚠️ Navol nejprve v roletkách nějaké výsledky!", true);
         return;
     }
 
-    // Čisté spuštění opony bez timeoutů
-    if (typeof window.showSplash === 'function') window.showSplash("Zapisuji tipy...");
+    if (!isSilent && typeof window.showSplash === 'function') {
+        window.showSplash("Zapisuji tipy...");
+    }
 
     const hromadnyBtn = document.getElementById('global-save-all-btn');
-    if (hromadnyBtn) {
+    if (hromadnyBtn && !isSilent) {
         hromadnyBtn.disabled = true;
         hromadnyBtn.style.opacity = "0.5";
-        hromadnyBtn.innerText = "⏳ UKLÁDÁM...";
     }
 
     try {
@@ -1191,22 +1255,21 @@ if (!navigator.onLine) {
         if (rejected.length > 0) {
             window.showToast(`⚠️ ULOŽENO: ${citacNovychTipu - rejected.length} tipů. Odmítnuto ${rejected.length} zápasů z důvodu zahájení hry!`, true);
         } else {
-            window.showToast(`⚡ Úspěšně uloženo ${citacNovychTipu} tipů najednou!`);
+            if (!isSilent) window.showToast(`⚡ Úspěšně uloženo ${citacNovychTipu} tipů najednou!`);
         }
 
         window.isAppFormDirty = false;
+        window.prepocitejPocitadlaTipu();
         window.renderMatches(leagueName);
     } catch (e) {
         console.error("Chyba hromadného tipování:", e);
-        window.showToast(`❌ ${e.message || "Server odmítl hromadný zápis."}`, true);
+        if (!isSilent) window.showToast(`❌ ${e.message || "Server odmítl hromadný zápis."}`, true);
     } finally {
-        if (hromadnyBtn) {
+        if (hromadnyBtn && !isSilent) {
             hromadnyBtn.disabled = false;
             hromadnyBtn.style.opacity = "1";
-            hromadnyBtn.innerText = "🎯 ZAPSAT VŠE";
         }
-        // Stažení opony až po kompletním dokončení async a překreslení DOMu
-        if (typeof window.hideSplash === 'function') {
+        if (!isSilent && typeof window.hideSplash === 'function') {
             if (typeof Alpine !== 'undefined' && Alpine.nextTick) {
                 Alpine.nextTick(() => window.hideSplash());
             } else {
@@ -1362,9 +1425,7 @@ const zobrazVarovnyModal = (onConfirm) => {
     `;
     window.openGlobalUiModal("POZOR! ODCHÁZÍŠ ZE STADIONU", modalContent);
 
-    // 🛡️ Cílíme výhradně na dynamický popup a NIKDY nesmažeme statického #loutkovodic-modal
-    const overlays = document.querySelectorAll('.spy-modal-overlay:not(#loutkovodic-modal)');
-    const overlay = overlays[overlays.length - 1];
+    const overlay = document.querySelector('.dynamic-global-modal');
 
     const btnStay = document.getElementById('dirty-modal-stay');
     const btnLeave = document.getElementById('dirty-modal-leave');
@@ -1387,17 +1448,14 @@ window.addEventListener('popstate', (event) => {
     const store = Alpine.store('appState');
     if (!store) return;
 
-    // 1. Zavření otevřeného menu nebo vyskakovacích oken
-    if (store.isMenuOpen) {
-        store.isMenuOpen = false;
-    }
-    if (store.reorderModalOpen) {
-        store.reorderModalOpen = false;
-    }
-    if (store.premierCupSurveyOpen) {
-        store.premierCupSurveyOpen = false;
-    }
-    document.querySelectorAll('.spy-modal-overlay:not(#loutkovodic-modal):not(#reorder-leagues-modal)').forEach(el => el.remove());
+    // 1. Zavření otevřeného menu a statických oken přes stav Alpine
+    if (store.isMenuOpen) store.isMenuOpen = false;
+    if (store.reorderModalOpen) store.reorderModalOpen = false;
+    if (store.groupModalOpen) store.groupModalOpen = false;
+    if (store.premierCupSurveyOpen) store.premierCupSurveyOpen = false;
+
+    // 2. Úklid výhradně dynamických oken (žádný statický modál se nesmaže z DOMu)
+    document.querySelectorAll('.dynamic-global-modal').forEach(el => el.remove());
 
     const targetState = event.state;
     const targetScreen = targetState?.screen || 'leaguesScreen';

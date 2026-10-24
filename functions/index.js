@@ -20,12 +20,14 @@ exports.recalculateLeaderboardCF = adminModule.recalculateLeaderboardCF;
 exports.transferUserDataCF = adminModule.transferUserDataCF;
 exports.updateMatchDateCF = adminModule.updateMatchDateCF;
 exports.saveMatchOddsCF = adminModule.saveMatchOddsCF;
+exports.saveMatchResultCF = adminModule.saveMatchResultCF;
 exports.deleteMatchOddsCF = adminModule.deleteMatchOddsCF;
 exports.deleteMatchCF = adminModule.deleteMatchCF;
 exports.toggleMatchPostponedCF = adminModule.toggleMatchPostponedCF;
 exports.toggleTopMatchCF = adminModule.toggleTopMatchCF;
 exports.syncAllUsersToRtdbCF = adminModule.syncAllUsersToRtdbCF;
 exports.deleteMyAccountCF = adminModule.deleteMyAccountCF;
+exports.adminManageGroupCF = adminModule.adminManageGroupCF;
 
 // 4. Cloud Tasks & Push notifikace (tasks.js)
 const tasks = require("./tasks");
@@ -33,6 +35,7 @@ exports.togglePushSubscriptionCF = tasks.togglePushSubscriptionCF;
 exports.preMatchExecutionTask = tasks.preMatchExecutionTask;
 exports.botWakeupAndKeepAliveTask = tasks.botWakeupAndKeepAliveTask;
 exports.rescheduleBudikyManual = tasks.rescheduleBudikyManual;
+exports.kickoffLockExecutionTask = tasks.kickoffLockExecutionTask;
 
 // 5. Plánované cron radary (scheduled.js)
 const scheduled = require("./scheduled");
@@ -44,3 +47,10 @@ exports.syncOddsHockeyWeekendScheduled = scheduled.syncOddsHockeyWeekendSchedule
 exports.syncOddsHockeyMondayScheduled = scheduled.syncOddsHockeyMondayScheduled;
 exports.syncOddsHockeyWednesdayScheduled = scheduled.syncOddsHockeyWednesdayScheduled;
 exports.syncEventMappingScheduled = scheduled.syncEventMappingScheduled;
+
+// 6. Soukromé skupiny & Miniligy (groups.js)
+const groups = require("./groups");
+exports.createGroupCF = groups.createGroupCF;
+exports.joinGroupCF = groups.joinGroupCF;
+exports.addBotToGroupCF = groups.addBotToGroupCF;
+exports.renameGroupCF = groups.renameGroupCF;

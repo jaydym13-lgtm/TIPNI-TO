@@ -14,7 +14,8 @@ const canvasContext = typeof document !== 'undefined' ? document.createElement('
 // =========================================================================
 window.otevriReportModal = (leagueName, tab) => {
     const store = Alpine.store('appState');
-    const centralDoc = store?.leaderboardData;
+    const isGroup = Boolean(store?.selectedGroupId && store?._groupLeaderboardData);
+    const centralDoc = isGroup ? store._groupLeaderboardData : store?.leaderboardData;
     if (!centralDoc) return;
 
     const isLive = (tab === 'live');
@@ -61,7 +62,10 @@ window.otevriReportModal = (leagueName, tab) => {
     const targetRoundKey = availableRounds[0] || centralDoc.aktivniKoloText || '';
     const souhrnKola = kolaSouhrn[targetRoundKey] || null;
 
-    let report = `🏆 ${leagueName.toUpperCase()} – STAV & POŘADÍ\n`;
+    const groupName = isGroup ? (centralDoc.skupina?.nazev || 'Partička') : null;
+    let report = groupName 
+        ? `👥 ${groupName.toUpperCase()} (${leagueName.toUpperCase()}) – STAV & POŘADÍ\n`
+        : `🏆 ${leagueName.toUpperCase()} – STAV & POŘADÍ\n`;
     report += isLive ? `🔴 ŽIVÝ STAV POLE / BĚHEM ZÁPASŮ\n` : `📊 AKTUÁLNÍ TABULKA A SOUHRN\n`;
     report += `────────────────────────────\n\n`;
 
@@ -169,7 +173,7 @@ window.otevriReportModal = (leagueName, tab) => {
                         📋 KOPÍROVAT TEXT
                     </button>
                     ${navigator.share ? `
-                        <button type="button" class="btn-report-share" onclick="window.shareReportFromModal('${window.escapeHTML(leagueName)}')">
+                        <button type="button" class="btn-report-share" onclick="window.shareReportFromModal('${window.escapeHTML(groupName || leagueName)}')">
                             📤 SDÍLET
                         </button>
                     ` : ''}
@@ -223,7 +227,7 @@ window.shareReportFromModal = async (leagueName) => {
 // =========================================================================
 // 🏆 ČISTÉ VYKRESLENÍ TABULKY HRÁČŮ
 // =========================================================================
-window.renderLeaderboard = (resetExpanded = false) => {
+window.renderLeaderboard = async (resetExpanded = false) => {
     const store = Alpine.store('appState');
     const leagueName = store ? store.selectedLeague : null;
     const container = document.querySelector('#leaderboardScreen .zebra-container');
@@ -309,7 +313,34 @@ window.renderLeaderboard = (resetExpanded = false) => {
     `;
 
     const contentArea = container.querySelector('.leaderboard-content-area');
-    const leaderboardData = store?.leaderboardData;
+    let leaderboardData = store?.leaderboardData;
+    const activeGroupId = store?.selectedGroupId;
+    const sezonaId = store?.activeSeason || window.SEZONA_ID || "2026_2027";
+    const ligaKlic = String(leagueName).replace(/ /g, "_");
+
+    // 👥 PŘEPNUTÍ NA STATICKÝ SOUBOR PARTIČKY Z R2 (0 READS)
+    if (activeGroupId) {
+        try {
+            const keshRazitko = Date.now();
+            const resGrp = await fetch(`${CONFIG.R2_BASE_URL}/sezony/${sezonaId}/${ligaKlic}/skupiny/${activeGroupId}.json?v=${keshRazitko}`);
+            if (resGrp.ok) {
+                const grpJson = await resGrp.json();
+                store._groupLeaderboardData = grpJson;
+                leaderboardData = {
+                    ...(leaderboardData || {}),
+                    ...grpJson,
+                    zebricek: grpJson.zebricek || [],
+                    zebricekLive: grpJson.zebricekLive || [],
+                    isLive: grpJson.isLive || false,
+                    aktualizovano: grpJson.aktualizovano || leaderboardData?.aktualizovano
+                };
+            }
+        } catch (e) {
+            console.warn("Nepodařilo se načíst soubor skupiny z R2:", e);
+        }
+    } else {
+        store._groupLeaderboardData = null;
+    }
 
     if (!leaderboardData) {
         contentArea.innerHTML = `<div class="db-empty-msg" style="color:#fbbf24;">Žebříček se na pozadí připravuje... ⚙️</div>`;
@@ -480,11 +511,16 @@ window.vykresliDataZebříčku = (centralDoc, contentArea, tab, leagueName) => {
         row.setAttribute('data-uid', stats.uid);
         const melByBytOtevreny = uidsKObnoveni.includes(stats.uid);
 
+        const isBot = Boolean(stats.isBot);
+        const nickDisplayHtml = isBot
+            ? `🤖 ${window.escapeHTML(stats.nickname)} <span style="color: #9ca3af; font-size: 0.8rem; font-weight: normal; margin-left: 2px;">(bot)</span>`
+            : window.escapeHTML(stats.nickname);
+
         row.innerHTML = `
             <div onclick="const det = this.nextElementSibling; const arr = this.querySelector('.leaderboard-arrow-icon'); if(det.style.display==='none' || det.style.display===''){det.style.display='block'; arr.innerText='▲';}else{det.style.display='none'; arr.innerText='▼';}" class="leaderboard-row-trigger">
                 <div class="leaderboard-row-left">
                     <span class="leaderboard-row-position">${pozice}</span>
-                    <span class="leaderboard-row-nickname">${window.escapeHTML(stats.nickname)}${deltaHtml}</span>
+                    <span class="leaderboard-row-nickname">${nickDisplayHtml}${deltaHtml}</span>
                 </div>
                 <div class="leaderboard-row-right">
                     <div class="leaderboard-row-points ${stats.celkemBodu < 0 ? 'is-negative' : ''}">
@@ -709,7 +745,16 @@ window.vykresliRekordyAStatistiky = (centralDoc, contentArea, tab, leagueName) =
             sortedNames.push({ name: n, isMe: false });
         });
 
-        const renderItem = (item) => `<span class="rekord-name ${item.isMe ? 'is-me' : ''}">${window.escapeHTML(item.name)}</span>`;
+        const botNicksSet = new Set((zebricek || []).filter(p => p.isBot).map(p => p.nickname));
+        const renderItem = (item) => {
+            const cleanName = item.name.split(' (')[0].trim();
+            const rest = item.name.slice(cleanName.length);
+            const isBot = botNicksSet.has(cleanName) || botNicksSet.has(item.name);
+            const nameHtml = isBot
+                ? `<span style="white-space: nowrap; display: inline-flex; align-items: center; gap: 3px;">🤖&nbsp;${window.escapeHTML(cleanName)}</span>${window.escapeHTML(rest)}`
+                : window.escapeHTML(item.name);
+            return `<span class="rekord-name ${item.isMe ? 'is-me' : ''}">${nameHtml}</span>`;
+        };
         const ampSep = ` <span class="rekord-amp">&</span> `;
         const commaSep = `, `;
 
@@ -748,7 +793,10 @@ window.vykresliRekordyAStatistiky = (centralDoc, contentArea, tab, leagueName) =
             if (idx > 0) {
                 sepWidth = (idx === sortedNames.length - 1) ? ampWidth : commaWidth;
             }
-            totalAllWidth += measurePx(item.name) + sepWidth;
+            const cleanName = item.name.split(' (')[0].trim();
+            const isBot = botNicksSet.has(cleanName) || botNicksSet.has(item.name);
+            const botExtra = isBot ? measurePx('🤖 ') : 0;
+            totalAllWidth += measurePx(item.name) + botExtra + sepWidth;
         });
 
         if (totalAllWidth <= availablePx) {
@@ -756,10 +804,15 @@ window.vykresliRekordyAStatistiky = (centralDoc, contentArea, tab, leagueName) =
         }
 
         let bestK = 1;
-        let currentPrefixWidth = measurePx(sortedNames[0].name);
+        const firstClean = sortedNames[0].name.split(' (')[0].trim();
+        const firstIsBot = botNicksSet.has(firstClean) || botNicksSet.has(sortedNames[0].name);
+        let currentPrefixWidth = measurePx(sortedNames[0].name) + (firstIsBot ? measurePx('🤖 ') : 0);
 
         for (let i = 1; i < sortedNames.length; i++) {
-            const nextNameWidth = commaWidth + measurePx(sortedNames[i].name);
+            const cName = sortedNames[i].name.split(' (')[0].trim();
+            const iBot = botNicksSet.has(cName) || botNicksSet.has(sortedNames[i].name);
+            const botExtra = iBot ? measurePx('🤖 ') : 0;
+            const nextNameWidth = commaWidth + measurePx(sortedNames[i].name) + botExtra;
             const remainingCount = sortedNames.length - (i + 1);
             
             if (remainingCount === 0) {
@@ -951,11 +1004,14 @@ window.vykresliRekordyAStatistiky = (centralDoc, contentArea, tab, leagueName) =
             .map(item => {
                 const count = item.rounds.length;
                 const isMe = Boolean(myNickClean && (item.nickname.toLowerCase() === myNickClean || item.nickname.toLowerCase().startsWith(myNickClean + ' ')));
+                const pObj = (zebricek || []).find(p => p.uid === item.uid || p.nickname === item.nickname);
+                const isBot = Boolean(pObj?.isBot);
+                const botPrefix = isBot ? '<span style="white-space: nowrap;">🤖&nbsp;</span>' : '';
                 return `
                     <div class="rekord-row is-gold-tier">
                         <div class="rekord-badge">👑 ${count}x</div>
                         <div class="rekord-names-text">
-                            <span class="rekord-name ${isMe ? 'is-me' : ''}">${window.escapeHTML(item.nickname)} (${window.escapeHTML(item.rounds.join(', '))})</span>
+                            <span class="rekord-name ${isMe ? 'is-me' : ''}">${botPrefix}${window.escapeHTML(item.nickname)} (${window.escapeHTML(item.rounds.join(', '))})</span>
                         </div>
                     </div>`;
             }).join('');
@@ -1161,6 +1217,7 @@ window.toggleRadarHeroRow = (rowEl) => {
 window.vykresliRadar = (centralDoc, contentArea, tab, leagueName) => {
     const myNick = Alpine.store('appState')?.nickname || '';
     const myNickClean = myNick.trim().toLowerCase();
+    const zebricek = centralDoc?.zebricek || centralDoc?.zebricekLive || [];
     if (!centralDoc) {
         contentArea.innerHTML = `<div class="db-empty-msg" style="color:#fbbf24;">Radar se na pozadí připravuje... ⚙️</div>`;
         return;
@@ -1339,15 +1396,20 @@ window.vykresliRadar = (centralDoc, contentArea, tab, leagueName) => {
             </div>
         `;
     } else {
-        const renderVlk = (v) => `
+        const botNicks = new Set((zebricek || []).filter(p => p.isBot).map(p => p.nickname));
+        const renderVlk = (v) => {
+            const isBot = botNicks.has(v.hrac);
+            const botPrefix = isBot ? '<span style="white-space: nowrap;">🤖&nbsp;</span>' : '';
+            return `
             <div class="radar-list-item">
                 <span class="radar-item-icon">🎯</span>
                 <div class="radar-item-info">
                     <span class="radar-item-match">${window.escapeHTML(v.zapas)}</span>
-                    <span class="radar-item-meta">${window.escapeHTML(v.kolo)} • Trefil jediný <strong style="color: #34d399;">${window.escapeHTML(v.hrac)}</strong>${v.tip ? ` tip ${window.escapeHTML(String(v.tip).replace(/\s*:\s*/g, ':'))}` : ''} (+${v.body} b.)</span>
+                    <span class="radar-item-meta">${window.escapeHTML(v.kolo)} • Trefil jediný <strong style="color: #34d399;">${botPrefix}${window.escapeHTML(v.hrac)}</strong>${v.tip ? ` tip ${window.escapeHTML(String(v.tip).replace(/\s*:\s*/g, ':'))}` : ''} (+${v.body} b.)</span>
                 </div>
             </div>
-        `;
+            `;
+        };
 
         if (vlci.length <= 2) {
             vlciHtml = `
@@ -1699,7 +1761,22 @@ window.showPlayerTipsModal = async (playerUid, leagueName) => {
         kolaMap[koloNazev].push(zap);
     });
 
-    const unikatniKola = Object.keys(kolaMap);
+    // ⏱️ ČASOVÁ OSA DLE POSLEDNÍHO ODEHRANÉHO/ŽIVÉHO ZÁPASU V KOLE:
+        // Kolo, ve kterém padl nejčerstvější gól nebo se právě teď dohrává, skočí na konec časové osy
+        const parsujZapasDatumMs = (z) => {
+            if (!z || !z.datum) return 0;
+            if (typeof z.datum.toDate === 'function') return z.datum.toDate().getTime();
+            if (z.datum.seconds) return z.datum.seconds * 1000;
+            return Date.parse(z.datum) || 0;
+        };
+
+        const unikatniKola = Object.keys(kolaMap).sort((a, b) => {
+            const zapasyA = kolaMap[a] || [];
+            const zapasyB = kolaMap[b] || [];
+            const maxMsA = zapasyA.reduce((max, z) => Math.max(max, parsujZapasDatumMs(z)), 0);
+            const maxMsB = zapasyB.reduce((max, z) => Math.max(max, parsujZapasDatumMs(z)), 0);
+            return maxMsA - maxMsB;
+        });
     if (unikatniKola.length === 0) {
         alert("Hráč zatím nemá žádné vyhodnocené tipy k zobrazení.");
         return;
@@ -2224,9 +2301,12 @@ window.showSpyModal = async (matchId, matchTitle) => {
             ? `<div class="match-spy-pts-badge ${badgeInfo.badgeClass}">${badgeInfo.ptsBadgeStr}</div>`
             : `<div class="match-spy-pts-badge badge-pts-zero">⏳ –</div>`;
 
+        const isBot = Boolean(pObj?.isBot);
+        const spyNickDisplay = isBot ? `🤖 ${hracNick}` : hracNick;
+
         rowsHtml += `
-            <div class="match-spy-card ${zebraClass} ${meClass}">
-                <span class="match-spy-nick">${window.escapeHTML(hracNick)}</span>
+            <div class="match-spy-card ${zebraClass}${meClass}">
+                <span class="match-spy-nick">${window.escapeHTML(spyNickDisplay)}</span>
                 <div class="match-spy-boxes">
                     <div class="match-spy-tip-box ${hasTip ? '' : 'no-tip'}">${tipStr}</div>
                     ${ptsBadgeHtml}
@@ -2449,14 +2529,16 @@ window.renderHallOfFame = (leagueFilter = 'ALL') => {
             myDisplayRank = currentRank;
         }
 
-        const metaSub = isAll ? `${p.archetypeName} • ${p.bestLeague}` : `${p.archetypeName} • ${p.points} b.`;
+        const metaSub = isAll ? `${p.archetypeName} •${p.bestLeague}` : `${p.archetypeName} •${p.points} b.`;
+        const isBot = Boolean(p.isBot);
+        const hofNickDisplay = isBot ? `🤖 ${window.escapeHTML(p.nickname)}` : window.escapeHTML(p.nickname);
 
         rowsHtml += `
             <div class="hof-player-row ${isMe ? 'is-current-user' : ''}" onclick="window.openPlayerProfile('${p.uid}', '${isAll ? 'ALL' : leagueFilter}')">
                 <div class="hof-player-left">
                     <span class="hof-player-rank">${medal}</span>
                     <div class="hof-player-info">
-                        <span class="hof-player-nick">${window.escapeHTML(p.nickname)}</span>
+                        <span class="hof-player-nick">${hofNickDisplay}</span>
                         <div class="hof-player-meta">
                             <span class="hof-archetype-tag">${p.archetype}</span>
                             <span>${metaSub}</span>
@@ -2506,5 +2588,36 @@ window.renderHallOfFame = (leagueFilter = 'ALL') => {
         window.myHofRankObserver.observe(myRow);
     } else if (myFab) {
         myFab.style.display = 'none';
+    }
+};
+
+// =========================================================================
+// 🤖 KLIENTSKÉ PŘIDÁNÍ BOTA DO SOUKROMÉ PARTY
+// =========================================================================
+window.pridatBotaDoParticky = async (groupId, leagueName) => {
+    if (!groupId || !leagueName) {
+        window.showToast("Vyber konkrétní partičku, do které chceš bota přidat! ⚠️", true);
+        return;
+    }
+
+    window.showToast("⏳ Přidávám bota TipniTo do tvé party...", false);
+
+    try {
+        const { httpsCallable } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-functions.js");
+        const addBotCF = httpsCallable(window.functions, 'addBotToGroupCF');
+        const res = await addBotCF({
+            groupId: groupId,
+            leagueName: leagueName,
+            sezonaId: Alpine.store('appState')?.activeSeason || window.SEZONA_ID || "2026_2027"
+        });
+
+        window.showToast(res.data?.message || "🤖 Bot TipniTo byl úspěšně přidán do party!");
+
+        if (typeof window.renderLeaderboard === 'function') {
+            window.renderLeaderboard(true);
+        }
+    } catch (err) {
+        console.error("Chyba při přidávání bota do skupiny:", err);
+        window.showToast("❌ " + (err.message || "Bota se nepodařilo přidat."), true);
     }
 };

@@ -68,11 +68,15 @@
                 
                 <!-- 🎯 TLAČÍTKO PRO PROGRAM UTKÁNÍ -->
                 <button id="global-save-all-btn" 
+                        class="global-save-all-btn"
+                        :class="{
+                            'is-incomplete': $store.appState?.incompleteTipsCount > 0,
+                            'is-dirty': $store.appState?.incompleteTipsCount === 0 && $store.appState?.dirtyTipsCount > 0
+                        }"
                         x-show="$store.appState?.currentScreen === 'matchesScreen' && $store.appState?.matchViewMode !== 'results' && !$store.appState.isArchived && $store.appState.isEnrolledInSelectedLeague"
                         x-cloak
                         @click="window.saveAllUserTips($store.appState.selectedLeague, event)"
-                        style="background: #2563eb; color: #fff; height: 36px; padding: 0 10px; font-weight: bold; font-size: 0.72rem; border: 1px solid #60a5fa; border-radius: 6px; cursor: pointer; text-transform: uppercase; font-family: 'Oswald', sans-serif; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; margin: 0;">
-                    🎯 ZAPSAT VŠE
+                        x-text="$store.appState?.incompleteTipsCount > 0 ? ('⚠️ DOKONČI (' + $store.appState.incompleteTipsCount + ')') : ($store.appState?.dirtyTipsCount > 0 ? ('💾 ULOŽIT (' + $store.appState.dirtyTipsCount + ')') : '🎯 ZAPSAT VŠE')">
                 </button>
 
                 <!-- ⚡ PRÉMIOVÝ JEDNOŘÁDKOVÝ ŠTÍTEK ZISKU BODŮ -->
@@ -168,7 +172,7 @@
                                         <svg class="micro-tile-cup-svg" viewBox="0 0 24 24" style="width: 16px; height: 16px; flex-shrink: 0;">
                                             <path fill="url(#silverGradGlobalCup)" d="M20.25 3H3.75C3.34 3 3 3.34 3 3.75V6c0 2.89 1.96 5.34 4.67 5.9.75 1.66 2.2 2.92 3.95 3.32V18H8.5c-.28 0-.5.22-.5.5v2c0 .28.22.5.5.5h7c.28 0 .5-.22.5-.5v-2c0-.28-.22-.5-.5-.5h-3.12v-2.78c1.75-.4 3.2-1.66 3.95-3.32 2.71-.56 4.67-3.01 4.67-5.9V3.75c0-.41-.34-.75-.75-.75zM5 6V5h2.13v3.87C5.9 8.27 5 6.99 5 6zm14 0c0 .99-.9 2.27-2.13 2.87V5H19v1z"/>
                                         </svg>
-                                        <span x-text="liga === 'Premier League' ? 'TIPNI PREMIER CUP' : 'TIPNI CHANCE CUP'"></span>
+                                        <span>TIPNI CUP</span>
                                     </button>
                                 </div>
                             </div>
@@ -189,7 +193,11 @@
                         <span class="gm-btn-icon">👥</span>
                         <span class="gm-btn-text">UŽIVATELÉ</span>
                     </button>
-                        <button class="godmode-menu-btn btn-gm-matches" @click="window.openSuperAdminTab('matches')">
+                        <button class="godmode-menu-btn btn-gm-groups" @click="window.openSuperAdminTab('groups')">
+                        <span class="gm-btn-icon">📂</span>
+                        <span class="gm-btn-text">SPRÁVA PARTIČEK</span>
+                    </button>
+                    <button class="godmode-menu-btn btn-gm-matches" @click="window.openSuperAdminTab('matches')">
                         <span class="gm-btn-icon">⚽</span>
                         <span class="gm-btn-text">SPRAVOVAT ZÁPASY</span>
                     </button>
@@ -236,7 +244,7 @@
     <div id="loginScreen" x-show="$store.appState?.currentScreen === 'loginScreen'" x-transition.opacity.duration.150ms x-cloak>
         <div class="app-container">
             <h2 class="hero-title">TIPNI TO!</h2>
-            <div class="login-tagline-badge">OFICIÁLNÍ TIPOVAČKA • 2026/2027</div>
+            <div class="login-tagline-badge">SPORTOVNÍ TIPOVAČKA • 2026/2027</div>
 
             <div class="content-box login-content-box">
                 
@@ -347,9 +355,9 @@
             <div class="leagues-header-flex" x-show="$store.appState?.leagues && $store.appState?.leagues.length > 0">
                 <h2 class="screen-main-title" style="margin: 0;">VYBER SI TIPOVAČKU</h2>
                 <button class="btn-reorder-trigger" 
-                        x-show="$store.appState?.leagues && $store.appState?.leagues.length > 1" 
+                        x-show="!$store.appState.isGuest" 
                         @click="window.openReorderLeaguesModal()">
-                    ↕️ SEŘADIT
+                    ⚙️ SOUTĚŽE
                 </button>
             </div>
             
@@ -374,7 +382,8 @@
             </div>
 
             <div class="katalog-list-container">
-                <template x-for="liga in $store.appState?.leagues" :key="liga">
+                <!-- 🏆 1. MOJE AKTIVNÍ SOUTĚŽE (VŽDY NAHOŘE) -->
+                <template x-for="liga in $store.appState?.myEnrolledLeagues" :key="liga">
                     <button class="katalog-card-btn" 
                             :style="window.getLeagueStadium(liga) ? ('--stadium-bg: url(' + window.getLeagueStadium(liga) + ')') : '--stadium-bg: none;'"
                             :class="{
@@ -404,15 +413,56 @@
                         
                         <!-- Pravá část: Podtext + Šipka -->
                         <div class="katalog-card-right">
-                            <span class="katalog-card-sub" 
-                                  :style="(!$store.appState.isSuperAdmin && !$store.appState.isGuest && !($store.appState._leagues || []).includes(liga)) ? 'color: #38bdf8; border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.12);' : ''"
-                                  x-text="(!$store.appState.isSuperAdmin && !$store.appState.isGuest && !($store.appState._leagues || []).includes(liga)) ? '👀 NAHLÉDNOUT DO HRY' : $store.appState.getLeagueSubtext(liga)"></span>
+                            <span class="katalog-card-sub" x-text="$store.appState.getLeagueSubtext(liga)"></span>
                             <span class="katalog-card-arrow">➔</span>
                         </div>
                     </button>
                 </template>
 
-                <template x-if="!$store.appState?.leagues || $store.appState?.leagues.length === 0">
+                <!-- 🗂️ DĚLICÍ PŘEDĚL PRO SHOWROOM (POUZE KDYŽ JSOU DOSTUPNÉ NEAKTIVNÍ LIGY) -->
+                <template x-if="$store.appState?.previewLeagues && $store.appState.previewLeagues.length > 0">
+                    <div class="katalog-divider">
+                        <div class="katalog-divider-line-left"></div>
+                        <span>👀 SOUTĚŽE K NAHLÉDNUTÍ</span>
+                        <div class="katalog-divider-line-right"></div>
+                    </div>
+                </template>
+
+                <!-- 👀 2. NEAKTIVNÍ SOUTĚŽE K NAHLÉDNUTÍ (SHOWROOM DOLE) -->
+                <template x-for="liga in $store.appState?.previewLeagues" :key="liga">
+                    <button class="katalog-card-btn" 
+                            :style="window.getLeagueStadium(liga) ? ('--stadium-bg: url(' + window.getLeagueStadium(liga) + ')') : '--stadium-bg: none;'"
+                            :class="{
+                                'card-pl': liga.toLowerCase().includes('premier'),
+                                'card-chance': liga.toLowerCase().includes('chance'),
+                                'card-ucl': liga.toLowerCase().includes('mistr') || liga.toLowerCase().includes('ucl'),
+                                'card-extraliga': liga.toLowerCase().includes('extraliga'),
+                                'card-hockey-wc': liga.toLowerCase().includes('hokeji'),
+                                'card-national': liga.toLowerCase().includes('národů'),
+                                'card-wc': liga.toLowerCase().includes('ms ve fotbale')
+                            }"
+                            @click="window.selectLeague(liga)">
+                        
+                        <img x-show="$store.appState?.fanGraphics" :src="window.getLeagueTrophy(liga)" class="katalog-card-trophy" alt="" onerror="this.style.display='none'">
+
+                        <div class="katalog-card-left">
+                            <div class="katalog-card-logo-wrapper">
+                                <img :src="window.getLeagueLogo(liga)" class="katalog-card-logo" alt="Logo" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='img/favicon192.png';">
+                            </div>
+                            <div class="katalog-card-info">
+                                <span class="katalog-card-badge" x-text="window.getLeagueBadge(liga)"></span>
+                                <div class="katalog-card-title" x-text="liga.toUpperCase()"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="katalog-card-right">
+                            <span class="katalog-card-sub is-preview">👀 NAHLÉDNOUT DO HRY</span>
+                            <span class="katalog-card-arrow">➔</span>
+                        </div>
+                    </button>
+                </template>
+
+                <template x-if="(!$store.appState?.myEnrolledLeagues || $store.appState.myEnrolledLeagues.length === 0) && (!$store.appState?.previewLeagues || $store.appState.previewLeagues.length === 0)">
                     <div class="db-empty-msg">Zatím nejsi přiřazen v žádné tipovačce. Počkej na schválení od admina. ⏳</div>
                 </template>
             </div>
@@ -433,6 +483,25 @@
                 👀 NEZÁVAZNÝ NÁHLED • TUTO SOUTĚŽ NEMÁŠ V LICENCI (TIPOVÁNÍ UZAMČENO)
             </div>
             
+            <!-- 👥 PŘEPÍNAČ PARTIČEK (HNED POD HORNÍM PEVNÝM PANELEM) -->
+            <div class="group-select-bar-wrapper" x-show="$store.appState?.selectedLeague" x-cloak>
+                <div class="group-select-bar" @click="window.openGroupModal()">
+                    <div class="group-select-bar-left">
+                        <span class="group-select-bar-icon" x-text="$store.appState.selectedGroupId ? '👥' : '🌍'"></span>
+                        <div class="group-select-bar-info">
+                            <span class="group-select-bar-title" x-text="$store.appState.currentGroupTitle"></span>
+                            <span class="group-select-bar-rank" x-show="$store.appState.currentGroupRankText" x-text="$store.appState.currentGroupRankText"></span>
+                        </div>
+                    </div>
+                    <div class="group-select-bar-right">
+                        <button type="button" class="group-fav-star-btn" @click.stop="window.toggleFavGroup()" :title="$store.appState.isCurrentGroupFav ? 'Výchozí zobrazení' : 'Nastavit jako výchozí'">
+                            <span :style="$store.appState.isCurrentGroupFav ? 'color: #fbbf24;' : 'color: #6b7280;'" x-text="$store.appState.isCurrentGroupFav ? '★' : '☆'"></span>
+                        </button>
+                        <span class="group-select-bar-arrow">▼</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- 🎛️ INLINE MICRO-TOOLBAR -->
             <div id="inlineMicroToolbar" class="menu-inline-micro-toolbar" x-show="$store.appState?.selectedLeague" x-cloak>
                 <button @click="window.goToScreen('leaderboardScreen')" class="micro-tile-btn" :class="{ 'is-active': $store.appState?.currentScreen === 'leaderboardScreen' }">🏆</button>
@@ -558,11 +627,11 @@
                                 <span class="match-date">
                                     📅 <span x-text="match.datumText"></span>
                                     <!-- 🛡️ Špehovací oko se odemkne POUZE tehdy, pokud zápas NENÍ odložen! -->
-                                    <template x-if="(match.vysledek_domaci !== undefined || match.apiStatus === 'IN_PLAY' || match.apiStatus === 'PAUSED' || match.datumObj <= new Date()) && match.apiStatus !== 'POSTPONED'">
+                                    <template x-if="(match.vysledek_domaci !== undefined || match.apiStatus === 'IN_PLAY' || match.apiStatus === 'PAUSED' || match.datumObj <= new Date() || $store.appState.liveTicks?.[match.id]) && match.apiStatus !== 'POSTPONED'">
                                         <span class="match-metadata-eye" @click="window.showSpyModal(match.id, match.domaci + ' - ' + match.hoste)">👁️</span>
                                     </template>
                                     <!-- 🔒 Pro odložený zápas zůstává zámek vždy zamčený -->
-                                    <template x-if="(match.vysledek_domaci === undefined && match.apiStatus !== 'IN_PLAY' && match.apiStatus !== 'PAUSED' && match.datumObj > new Date()) || match.apiStatus === 'POSTPONED'">
+                                    <template x-if="(match.vysledek_domaci === undefined && match.apiStatus !== 'IN_PLAY' && match.apiStatus !== 'PAUSED' && match.datumObj > new Date() && !$store.appState.liveTicks?.[match.id]) || match.apiStatus === 'POSTPONED'">
                                         <span class="match-metadata-lock">🔒</span>
                                     </template>
                                     <template x-if="match.isTopMatch">
@@ -580,7 +649,7 @@
                                     <div class="user-tip-label">Můj Tip</div>
                                     <div class="user-tip-value" :class="$store.appState.mojeTipy[match.id] ? 'valid-tip' : 'no-tip'" style="position: relative; display: flex; justify-content: center; align-items: center; width: 100%;">
                                         <template x-if="$store.appState.mojeTipy[match.id]">
-                                            <span x-html="($store.appState.matchViewMode === 'results' || match.apiStatus === 'IN_PLAY' || match.apiStatus === 'PAUSED' || match.vysledek_domaci !== undefined || (match.datumObj <= new Date() && match.apiStatus !== 'POSTPONED')) ? window.formatujZobrazeneSkore($store.appState.mojeTipy[match.id].tip_domaci, $store.appState.mojeTipy[match.id].tip_hoste, $store.appState.mojeTipy[match.id].postup, $store.appState.selectedLeague, match.isPlayoff) : ($store.appState.mojeTipy[match.id].tip_domaci + ':' + $store.appState.mojeTipy[match.id].tip_hoste)"></span>
+                                            <span x-html="($store.appState.matchViewMode === 'results' || match.apiStatus === 'IN_PLAY' || match.apiStatus === 'PAUSED' || match.vysledek_domaci !== undefined || ((match.datumObj <= new Date() || $store.appState.liveTicks?.[match.id]) && match.apiStatus !== 'POSTPONED')) ? window.formatujZobrazeneSkore($store.appState.mojeTipy[match.id].tip_domaci, $store.appState.mojeTipy[match.id].tip_hoste, $store.appState.mojeTipy[match.id].postup, $store.appState.selectedLeague, match.isPlayoff) : ($store.appState.mojeTipy[match.id].tip_domaci + ':' + $store.appState.mojeTipy[match.id].tip_hoste)"></span>
                                         </template>
                                         <template x-if="!$store.appState.mojeTipy[match.id]">
                                             <span>?:?</span>
@@ -596,8 +665,8 @@
                                 </template>
 
                                 <template x-if="match.apiStatus === 'IN_PLAY' || match.apiStatus === 'PAUSED'">
-                                    <div class="user-tip-box live-radar-box middle-slot-box">
-                                        <div class="user-tip-label live-radar-label">🔴 LIVE</div>
+                                    <div class="user-tip-box live-radar-box middle-slot-box" :class="{ 'is-break': ($store.appState.liveTicks?.[match.id] || '').includes('PŘEST') || ($store.appState.liveTicks?.[match.id] || '') === 'POLOČAS' }">
+                                        <div class="user-tip-label live-radar-label" x-text="$store.appState.liveTicks?.[match.id] || 'LIVE'"></div>
                                         <div class="user-tip-value live-radar-value" style="display: flex; justify-content: center; align-items: center; width: 100%; font-weight: bold;"><span x-text="match.vysledek_domaci !== undefined ? match.vysledek_domaci : 0"></span><span style="margin: 0 2px;">:</span><span x-text="match.vysledek_hoste !== undefined ? match.vysledek_hoste : 0"></span></div>
                                     </div>
                                 </template>
@@ -611,21 +680,21 @@
                                     </div>
                                 </template>
 
-                                <template x-if="match.vysledek_domaci === undefined && match.apiStatus !== 'IN_PLAY' && match.apiStatus !== 'PAUSED' && match.apiStatus !== 'POSTPONED' && match.datumObj <= new Date()">
+                                <template x-if="match.vysledek_domaci === undefined && match.apiStatus !== 'IN_PLAY' && match.apiStatus !== 'PAUSED' && match.apiStatus !== 'POSTPONED' && (match.datumObj <= new Date() || $store.appState.liveTicks?.[match.id])">
                                     <div class="user-tip-box match-ongoing-box middle-slot-box">
                                         <span class="ongoing-text-top">ZÁPAS</span>
                                         <span class="ongoing-text-bottom">PROBÍHÁ</span>
                                     </div>
                                 </template>
 
-                                <template x-if="match.vysledek_domaci === undefined && match.apiStatus !== 'IN_PLAY' && match.apiStatus !== 'PAUSED' && match.apiStatus !== 'POSTPONED' && match.datumObj > new Date()">
+                                <template x-if="match.vysledek_domaci === undefined && match.apiStatus !== 'IN_PLAY' && match.apiStatus !== 'PAUSED' && match.apiStatus !== 'POSTPONED' && match.datumObj > new Date() && !$store.appState.liveTicks?.[match.id]">
                                     <div class="match-input-selectors-group middle-slot-box">
-                                        <select :id="'tip-domaci-' + match.id" :disabled="match.datumObj <= new Date() || !$store.appState.isEnrolledInSelectedLeague" class="select-score" :class="[$store.appState.rozvrtaneTipy[`${match.id}_domaci`] === '' ? 'is-empty' : ($store.appState.rozvrtaneTipy[`${match.id}_domaci`] === String($store.appState.mojeTipy[match.id]?.tip_domaci ?? '') ? 'is-saved' : 'is-dirty')]" x-model="$store.appState.rozvrtaneTipy[`${match.id}_domaci`]" @change="window.handleUserScoreChange(match.id, match.isPlayoff || false)">
+                                        <select :id="'tip-domaci-' + match.id" :disabled="(match.datumObj <= new Date() || $store.appState.liveTicks?.[match.id]) || !$store.appState.isEnrolledInSelectedLeague" class="select-score" :class="[$store.appState.rozvrtaneTipy[`${match.id}_domaci`] === '' ? 'is-empty' : ($store.appState.rozvrtaneTipy[`${match.id}_domaci`] === String($store.appState.mojeTipy[match.id]?.tip_domaci ?? '') ? 'is-saved' : 'is-dirty')]" x-model="$store.appState.rozvrtaneTipy[`${match.id}_domaci`]" @change="window.handleUserScoreChange(match.id, match.isPlayoff || false)">
                                             <option value="" hidden>?</option>
                                             <option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option>
                                         </select>
                                         <span class="select-divider">:</span>
-                                        <select :id="'tip-hoste-' + match.id" :disabled="match.datumObj <= new Date() || !$store.appState.isEnrolledInSelectedLeague" class="select-score" :class="[$store.appState.rozvrtaneTipy[`${match.id}_hoste`] === '' ? 'is-empty' : ($store.appState.rozvrtaneTipy[`${match.id}_hoste`] === String($store.appState.mojeTipy[match.id]?.tip_hoste ?? '') ? 'is-saved' : 'is-dirty')]" x-model="$store.appState.rozvrtaneTipy[`${match.id}_hoste`]" @change="window.handleUserScoreChange(match.id, match.isPlayoff || false)">
+                                        <select :id="'tip-hoste-' + match.id" :disabled="(match.datumObj <= new Date() || $store.appState.liveTicks?.[match.id]) || !$store.appState.isEnrolledInSelectedLeague" class="select-score" :class="[$store.appState.rozvrtaneTipy[`${match.id}_hoste`] === '' ? 'is-empty' : ($store.appState.rozvrtaneTipy[`${match.id}_hoste`] === String($store.appState.mojeTipy[match.id]?.tip_hoste ?? '') ? 'is-saved' : 'is-dirty')]" x-model="$store.appState.rozvrtaneTipy[`${match.id}_hoste`]" @change="window.handleUserScoreChange(match.id, match.isPlayoff || false)">
                                             <option value="" hidden>?</option>
                                             <option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option>
                                         </select>
@@ -638,17 +707,17 @@
                                     </div>
                                 </template>
 
-                                <template x-if="match.apiStatus !== 'POSTPONED' && match.vysledek_domaci === undefined && match.apiStatus !== 'IN_PLAY' && match.apiStatus !== 'PAUSED' && match.datumObj > new Date()">
-                                    <button class="btn-tip" :disabled="match.datumObj <= new Date() || !$store.appState.isEnrolledInSelectedLeague" @click="window.saveTip(match.id, $store.appState.selectedLeague, $event)" x-text="$store.appState.mojeTipy[match.id] ? 'ZMĚŇ' : 'ULOŽ'"></button>
+                                <template x-if="match.apiStatus !== 'POSTPONED' && match.vysledek_domaci === undefined && match.apiStatus !== 'IN_PLAY' && match.apiStatus !== 'PAUSED' && match.datumObj > new Date() && !$store.appState.liveTicks?.[match.id]">
+                                    <button class="btn-tip" :disabled="(match.datumObj <= new Date() || $store.appState.liveTicks?.[match.id]) || !$store.appState.isEnrolledInSelectedLeague" @click="window.saveTip(match.id, $store.appState.selectedLeague, $event)" x-text="$store.appState.mojeTipy[match.id] ? 'ZMĚŇ' : 'ULOŽ'"></button>
                                 </template>
 
-                                <template x-if="match.apiStatus !== 'POSTPONED' && $store.appState.mojeTipy[match.id] && (match.vysledek_domaci !== undefined || match.apiStatus === 'IN_PLAY' || match.apiStatus === 'PAUSED' || match.datumObj <= new Date())">
+                                <template x-if="match.apiStatus !== 'POSTPONED' && $store.appState.mojeTipy[match.id] && (match.vysledek_domaci !== undefined || match.apiStatus === 'IN_PLAY' || match.apiStatus === 'PAUSED' || match.datumObj <= new Date() || $store.appState.liveTicks?.[match.id])">
                                     <div class="match-points-badge" :class="window.urciBarvuATriduBodu($store.appState.mojeTipy[match.id].tip_domaci, $store.appState.mojeTipy[match.id].tip_hoste, match.vysledek_domaci !== undefined ? match.vysledek_domaci : 0, match.vysledek_hoste !== undefined ? match.vysledek_hoste : 0, $store.appState.selectedLeague, $store.appState.mojeTipy[match.id].postup, match.postup, match.isPlayoff, match.isTopMatch, true).badgeClass">
                                         <span x-text="window.urciBarvuATriduBodu($store.appState.mojeTipy[match.id].tip_domaci, $store.appState.mojeTipy[match.id].tip_hoste, match.vysledek_domaci !== undefined ? match.vysledek_domaci : 0, match.vysledek_hoste !== undefined ? match.vysledek_hoste : 0, $store.appState.selectedLeague, $store.appState.mojeTipy[match.id].postup, match.postup, match.isPlayoff, match.isTopMatch, true).ptsBadgeStr"></span>
                                     </div>
                                 </template>
 
-                                <template x-if="match.apiStatus !== 'POSTPONED' && !$store.appState.mojeTipy[match.id] && (match.vysledek_domaci !== undefined || match.apiStatus === 'IN_PLAY' || match.apiStatus === 'PAUSED' || match.datumObj <= new Date())">
+                                <template x-if="match.apiStatus !== 'POSTPONED' && !$store.appState.mojeTipy[match.id] && (match.vysledek_domaci !== undefined || match.apiStatus === 'IN_PLAY' || match.apiStatus === 'PAUSED' || match.datumObj <= new Date() || $store.appState.liveTicks?.[match.id])">
                                     <div class="match-points-badge" :class="window.urciBarvuATriduBodu('', '', match.vysledek_domaci !== undefined ? match.vysledek_domaci : 0, match.vysledek_hoste !== undefined ? match.vysledek_hoste : 0, $store.appState.selectedLeague, '', match.postup, match.isPlayoff, match.isTopMatch, false).badgeClass">
                                         <span x-text="window.urciBarvuATriduBodu('', '', match.vysledek_domaci !== undefined ? match.vysledek_domaci : 0, match.vysledek_hoste !== undefined ? match.vysledek_hoste : 0, $store.appState.selectedLeague, '', match.postup, match.isPlayoff, match.isTopMatch, false).ptsBadgeStr"></span>
                                     </div>
@@ -662,6 +731,7 @@
                                          match.apiStatus !== 'IN_PLAY' && 
                                          match.apiStatus !== 'PAUSED' && 
                                          match.datumObj > new Date() && 
+                                         !$store.appState.liveTicks?.[match.id] &&
                                          $store.appState.rozvrtaneTipy[`${match.id}_domaci`] != null && 
                                          $store.appState.rozvrtaneTipy[`${match.id}_domaci`] !== '' && 
                                          $store.appState.rozvrtaneTipy[`${match.id}_hoste`] != null && 
@@ -789,6 +859,26 @@
     <!-- 🏆 LEADERBOARD SCREEN -->
     <div id="leaderboardScreen" class="screen-scroll league-themed-screen" x-show="$store.appState?.currentScreen === 'leaderboardScreen'" x-cloak>
         <div class="app-container app-container-padding">
+
+        <!-- 👥 PŘEPÍNAČ PARTIČEK (HNED POD HORNÍM PEVNÝM PANELEM) -->
+            <div class="group-select-bar-wrapper" x-show="$store.appState?.selectedLeague" x-cloak>
+                <div class="group-select-bar" @click="window.openGroupModal()">
+                    <div class="group-select-bar-left">
+                        <span class="group-select-bar-icon" x-text="$store.appState.selectedGroupId ? '👥' : '🌍'"></span>
+                        <div class="group-select-bar-info">
+                            <span class="group-select-bar-title" x-text="$store.appState.currentGroupTitle"></span>
+                            <span class="group-select-bar-rank" x-show="$store.appState.currentGroupRankText" x-text="$store.appState.currentGroupRankText"></span>
+                        </div>
+                    </div>
+                    <div class="group-select-bar-right">
+                        <button type="button" class="group-fav-star-btn" @click.stop="window.toggleFavGroup()" :title="$store.appState.isCurrentGroupFav ? 'Výchozí zobrazení' : 'Nastavit jako výchozí'">
+                            <span :style="$store.appState.isCurrentGroupFav ? 'color: #fbbf24;' : 'color: #6b7280;'" x-text="$store.appState.isCurrentGroupFav ? '★' : '☆'"></span>
+                        </button>
+                        <span class="group-select-bar-arrow">▼</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="menu-inline-micro-toolbar" x-show="$store.appState?.selectedLeague" x-cloak>
                 <button @click="window.goToScreen('leaderboardScreen')" class="micro-tile-btn" :class="{ 'is-active': $store.appState?.currentScreen === 'leaderboardScreen' }">🏆</button>
                 <button @click="window.goToScreen('matchesScreen'); $store.appState.matchViewMode = 'upcoming'; $store.appState.programKolaIndex = 0;" class="micro-tile-btn" :class="{ 'is-active': $store.appState?.currentScreen === 'matchesScreen' && $store.appState?.matchViewMode !== 'results' }" x-text="$store.appState?.getSportIcon ? $store.appState.getSportIcon() : '⚽'"></button>
@@ -1153,6 +1243,26 @@
     <!-- 📋 SCORING SCREEN -->
     <div id="scoringScreen" class="screen-scroll league-themed-screen" x-show="$store.appState?.currentScreen === 'scoringScreen'" x-cloak>
         <div class="app-container app-container-padding">
+
+            <!-- 👥 PŘEPÍNAČ PARTIČEK (HNED POD HORNÍM PEVNÝM PANELEM) -->
+            <div class="group-select-bar-wrapper" x-show="$store.appState?.selectedLeague" x-cloak>
+                <div class="group-select-bar" @click="window.openGroupModal()">
+                    <div class="group-select-bar-left">
+                        <span class="group-select-bar-icon" x-text="$store.appState.selectedGroupId ? '👥' : '🌍'"></span>
+                        <div class="group-select-bar-info">
+                            <span class="group-select-bar-title" x-text="$store.appState.currentGroupTitle"></span>
+                            <span class="group-select-bar-rank" x-show="$store.appState.currentGroupRankText" x-text="$store.appState.currentGroupRankText"></span>
+                        </div>
+                    </div>
+                    <div class="group-select-bar-right">
+                        <button type="button" class="group-fav-star-btn" @click.stop="window.toggleFavGroup()" :title="$store.appState.isCurrentGroupFav ? 'Výchozí zobrazení' : 'Nastavit jako výchozí'">
+                            <span :style="$store.appState.isCurrentGroupFav ? 'color: #fbbf24;' : 'color: #6b7280;'" x-text="$store.appState.isCurrentGroupFav ? '★' : '☆'"></span>
+                        </button>
+                        <span class="group-select-bar-arrow">▼</span>
+                    </div>
+                </div>
+            </div>
+
             <div id="inlineMicroToolbar" class="menu-inline-micro-toolbar" x-show="$store.appState?.selectedLeague" x-cloak>
                 <button @click="window.goToScreen('leaderboardScreen')" class="micro-tile-btn" :class="{ 'is-active': $store.appState?.currentScreen === 'leaderboardScreen' }">🏆</button>
                 <button @click="window.goToScreen('matchesScreen'); $store.appState.matchViewMode = 'upcoming'; $store.appState.programKolaIndex = 0;" class="micro-tile-btn" :class="{ 'is-active': $store.appState?.currentScreen === 'matchesScreen' && $store.appState?.matchViewMode !== 'results' }" x-text="$store.appState?.getSportIcon ? $store.appState.getSportIcon() : '⚽'"></button>
@@ -1194,6 +1304,20 @@
     <!-- 🏆 CUP SCREEN -->
     <div id="cupScreen" class="screen-scroll league-themed-screen" x-show="$store.appState?.currentScreen === 'cupScreen'" x-cloak>
         <div class="app-container app-container-padding">
+
+            <!-- 🌍 GLOBÁLNÍ CELOLIGOVÝ ŠTÍTEK (POHÁR JE PRO CELOU LIGU) -->
+            <div class="group-select-bar-wrapper" x-show="$store.appState?.selectedLeague" x-cloak>
+                <div class="group-select-bar" style="cursor: default; border-left-color: #fbbf24; background: linear-gradient(135deg, rgba(251, 191, 36, 0.12) 0%, #0f172a 100%);">
+                    <div class="group-select-bar-left">
+                        <span class="group-select-bar-icon">🌍</span>
+                        <div class="group-select-bar-info">
+                            <span class="group-select-bar-title" style="color: #fbbf24;">CELOLIGOVÁ SOUTĚŽ</span>
+                            <span class="group-select-bar-rank" style="color: #cbd5e1;">(Všichni tipéři ligy hrají společně)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="menu-inline-micro-toolbar" x-show="$store.appState?.selectedLeague" x-cloak>
                 <button @click="window.goToScreen('leaderboardScreen')" class="micro-tile-btn" :class="{ 'is-active': $store.appState?.currentScreen === 'leaderboardScreen' }">🏆</button>
                 <button @click="window.goToScreen('matchesScreen'); $store.appState.matchViewMode = 'upcoming'; $store.appState.programKolaIndex = 0;" class="micro-tile-btn" :class="{ 'is-active': $store.appState?.currentScreen === 'matchesScreen' && $store.appState?.matchViewMode !== 'results' }" x-text="$store.appState?.getSportIcon ? $store.appState.getSportIcon() : '⚽'"></button>
@@ -1214,13 +1338,13 @@
                 </button>
             </div>
             
-            <h2 id="cupMainTitle" class="cup-main-screen-title">TIPNI CHANCE CUP</h2>
+            <h2 id="cupMainTitle" class="cup-main-screen-title">TIPNI CUP</h2>
 
             <div class="leaderboard-tabs-wrapper" style="margin-bottom: 12px; width: 100%; box-sizing: border-box; display: flex; gap: 6px;">
                 <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 4px; font-size: 0.78rem;" 
-                        :style="($store.appState.cupActiveTab || 'groups') === 'groups' ? 'background: #059669; color: white; border-color: #10b981;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;'" 
-                        @click="$store.appState.cupActiveTab = 'groups'; window.renderCupScreen();">
-                    👥 Skupiny
+                        :style="($store.appState.cupActiveTab || 'arena') === 'arena' ? 'background: #059669; color: white; border-color: #10b981;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;'" 
+                        @click="$store.appState.cupActiveTab = 'arena'; window.renderCupScreen();">
+                    🏟️ Pohárová aréna
                 </button>
                 <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 4px; font-size: 0.78rem;" 
                         :style="$store.appState.cupActiveTab === 'bracket' ? 'background: #ea580c; color: white; border-color: #f97316;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;'" 
@@ -1543,6 +1667,17 @@
             <div style="padding: 10px 14px; background: #0f172a; border-bottom: 1px solid #1f2937; color: #9ca3af; font-size: 0.78rem; text-align: left; line-height: 1.4;">
                 Šipkami nastav vlastní pořadí soutěží. Pořadí lze uložit maximálně 1× za 24 hodin.
             </div>
+            <!-- 🎛️ PŘEPÍNAČ SHOWROOMU (NAHLÉDNOUT DO HRY) -->
+            <div class="reorder-showroom-strip">
+                <div class="reorder-showroom-info">
+                    <span class="reorder-showroom-title">👀 Nahlédnout do ostatních lig</span>
+                    <span class="reorder-showroom-desc">Zobrazí v katalogu i soutěže mimo tvou licenci (pouze pro čtení).</span>
+                </div>
+                <label class="settings-switch">
+                    <input type="checkbox" :checked="$store.appState.showAllLeagues" @change="window.toggleShowAllLeagues($event.target.checked)">
+                    <span class="settings-slider"></span>
+                </label>
+            </div>
             <div class="spy-modal-body" style="flex: 1; overflow-y: auto; padding: 12px 14px; background: #0b0f19; display: flex; flex-direction: column; gap: 8px;">
                 <template x-for="(liga, idx) in $store.appState.reorderList" :key="liga">
                     <div class="reorder-item-row">
@@ -1857,11 +1992,11 @@
                     <div class="tutorial-slide-title">10. TIPNI CUP & INSTALACE (PWA)</div>
                     <div class="tutorial-card-preview">
                         <div class="tutorial-cup-flow-preview">
-                            <span>Hadí draft</span>
+                            <span>Kvalifikace</span>
                             <span>➔</span>
-                            <span>Skupiny</span>
+                            <span>Pohárová aréna</span>
                             <span>➔</span>
-                            <span>K.O. Pavouk</span>
+                            <span>Play-off</span>
                             <span>➔</span>
                             <span style="color:#fbbf24; font-weight:bold;">Finále</span>
                         </div>
@@ -1870,7 +2005,7 @@
                     <ul class="tutorial-feature-list">
                         <li><strong>Kde to najdeš:</strong> Ikona <code>🏆</code> v horním toolbaru + tlačítko v patičce bočního menu.</li>
                         <li><strong>Paralelní turnaj běží sám:</strong> Pohár nevyžaduje žádné tipy navíc – body se berou automaticky z tvých běžných ligových tipů.</li>
-                        <li><strong>Struktura turnaje:</strong> Kvalifikace Hadím draftem ➔ Základní skupiny ➔ Schodová pyramida Play-off (Předkola ➔ Osmifinále ➔ Čtvrtfinále ➔ Semifinále ➔ Grand Finále).</li>
+                        <li><strong>Struktura turnaje:</strong> 1.–9. kolo Ligový start ➔ 10.–17. kolo Pohárová aréna (8 kol ligové fáze od nuly) ➔ Play-off s Královskými volny ➔ Grand Finále ve 30. kole.</li>
                         <li><strong>PWA Instalace na plochu:</strong> V bočním menu klikni na <em>Stáhnout jako aplikaci</em> – získáš spouštění na celou obrazovku bez lišt prohlížeče.</li>
                     </ul>
                 </div>
@@ -1890,6 +2025,80 @@
                 <button class="tutorial-btn-finish" 
                         x-show="$store.appState.tutorialStep === $store.appState.tutorialTotalSteps - 1" 
                         @click="window.closeTutorial()">🚀 JÍT TIPOVAT</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 👥 CENTROVANÝ MODÁL: VÝBĚR A SPRÁVA PARTIČEK -->
+    <div id="groupSelectModal" class="spy-modal-overlay" x-show="$store.appState?.groupModalOpen" x-transition.opacity @click.self="window.closeGroupModal()" x-cloak>
+        <div class="spy-modal-box group-modal-box" @click.stop>
+            <div class="spy-modal-header">
+                <h3 x-text="'ZVOL ŽEBŘÍČEK: ' + ($store.appState?.selectedLeague || '').toUpperCase()"></h3>
+                <button type="button" class="spy-modal-close" @click="window.closeGroupModal()">✕</button>
+            </div>
+            
+            <div class="group-modal-body">
+                <!-- 🌍 Celá liga (Globální tabulka) -->
+                <div class="group-modal-row" :class="{ 'is-active': !$store.appState?.selectedGroupId }" @click="window.selectGroup(null)">
+                    <div class="group-modal-row-left">
+                        <span class="group-modal-icon">🌍</span>
+                        <div class="group-modal-info">
+                            <strong class="group-modal-name">Celá liga (Globální tabulka)</strong>
+                            <span class="group-modal-sub">Oficiální pořadí všech tipérů</span>
+                        </div>
+                    </div>
+                    <div class="group-modal-row-right">
+                        <button type="button" class="group-modal-star-btn" :class="{ 'is-fav': $store.appState?.favGroupId === 'GLOBAL' }" @click.stop="window.toggleFavGroupFor('GLOBAL')" :title="$store.appState?.favGroupId === 'GLOBAL' ? 'Výchozí zobrazení' : 'Nastavit jako výchozí'">
+                            <span :style="$store.appState?.favGroupId === 'GLOBAL' ? 'color: #fbbf24;' : 'color: #4b5563;'" x-text="$store.appState?.favGroupId === 'GLOBAL' ? '★' : '☆'"></span>
+                        </button>
+                        <span class="group-modal-badge" x-show="!$store.appState?.selectedGroupId">AKTIVNÍ</span>
+                    </div>
+                </div>
+
+                <!-- 👥 Seznam vlastních partiček hráče -->
+                <template x-for="grp in $store.appState?.myGroupsList" :key="grp.id">
+                    <div class="group-modal-row" :class="{ 'is-active': $store.appState?.selectedGroupId === grp.id }" @click="window.selectGroup(grp.id)">
+                        <div class="group-modal-row-left">
+                            <span class="group-modal-icon">📂</span>
+                            <div class="group-modal-info">
+                                <strong class="group-modal-name" x-text="grp.nazev"></strong>
+                                <span class="group-modal-sub" x-text="'Kód: ' + grp.kod + (grp.status === 'PENDING' ? ' • ⏳ Čeká na výkop' : '')"></span>
+                            </div>
+                        </div>
+                        <div class="group-modal-row-right">
+                            <button type="button" class="group-modal-star-btn" 
+                                    x-show="$store.appState?.isSuperAdmin || grp.autorUid === ($store.appState?.userUid || window.auth?.currentUser?.uid)" 
+                                    @click.stop="window.openRenameGroupModal(grp.id, grp.nazev)" 
+                                    title="Přejmenovat partičku (1× za 24h)">
+                                <span style="font-size: 0.82rem;">✏️</span>
+                            </button>
+                            <button type="button" class="group-modal-star-btn" :class="{ 'is-fav': grp.id === $store.appState?.favGroupId }" @click.stop="window.toggleFavGroupFor(grp.id)" :title="grp.id === $store.appState?.favGroupId ? 'Výchozí zobrazení' : 'Nastavit jako výchozí'">
+                                <span :style="grp.id === $store.appState?.favGroupId ? 'color: #fbbf24;' : 'color: #4b5563;'" x-text="grp.id === $store.appState?.favGroupId ? '★' : '☆'"></span>
+                            </button>
+                            <span class="group-modal-badge" x-show="$store.appState?.selectedGroupId === grp.id">AKTIVNÍ</span>
+                        </div>
+                    </div>
+                </template>
+
+                <div class="db-empty-msg" style="padding: 10px 0; font-size: 0.8rem; color: #9ca3af;" x-show="!$store.appState?.myGroupsList || $store.appState?.myGroupsList.length === 0">
+                    V této soutěži zatím nejsi v žádné partičce.
+                </div>
+            </div>
+
+            <!-- Akční tlačítka v patičce modálu -->
+            <div class="group-modal-footer" style="display: flex; flex-wrap: wrap; gap: 6px;">
+                <button type="button" class="group-modal-btn join-btn" style="flex: 1;" @click="window.openJoinGroupModal()">
+                    🔑 ZADAT KÓD PARTY
+                </button>
+                <button type="button" class="group-modal-btn create-btn" style="flex: 1;" x-show="!$store.appState?.isLeagueStarted" @click="window.openCreateGroupModal()">
+                    ➕ ZALOŽIT PARTIČKU
+                </button>
+                <button type="button" class="group-modal-btn" 
+                        style="width: 100%; background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); border: 1px solid #a78bfa; color: #ffffff; font-weight: bold; margin-top: 2px;"
+                        x-show="$store.appState?.selectedGroupId && !$store.appState?.isLeagueStarted" 
+                        @click="window.pridatBotaDoParticky($store.appState.selectedGroupId, $store.appState.selectedLeague)">
+                    🤖 PŘIDAT BOTA DO PARTY
+                </button>
             </div>
         </div>
     </div>

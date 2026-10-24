@@ -9,19 +9,25 @@ const { getAuth } = require("firebase-admin/auth");
 const { CloudTasksClient } = require("@google-cloud/tasks");
 
 // 🇪🇺 CENTRÁLNÍ EVROPSKÝ REGION PRO VŠECHNY CLOUD FUNKCE
+const { getDatabase } = require("firebase-admin/database");
+
 setGlobalOptions({ region: "europe-west1" });
 
-initializeApp();
+initializeApp({
+    databaseURL: "https://tipni-to-default-rtdb.europe-west1.firebasedatabase.app"
+});
 const db = getFirestore();
 const auth = getAuth();
+const rtdb = getDatabase();
 const tasksClient = new CloudTasksClient();
 
-// Kompatibilita pro stávající FieldValue a Timestamp volání
+// Kompatibilita pro stávající FieldValue, Timestamp a Realtime Database volání
 const admin = {
     firestore: {
         FieldValue,
         Timestamp
-    }
+    },
+    database: () => rtdb
 };
 
 // ⚙️ CENTRÁLNÍ KONSTANTY BACKENDU
@@ -33,6 +39,7 @@ const BOT_SECRET = process.env.BOT_SECRET || "";
 module.exports = {
     db,
     auth,
+    rtdb,
     admin,
     FieldValue,
     Timestamp,

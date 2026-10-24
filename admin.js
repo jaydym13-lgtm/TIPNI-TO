@@ -496,6 +496,379 @@ window.deleteMatch = (matchId) => {
     };
 };
 
+// =========================================================================
+// 👥 SPRÁVA PARTIČEK (MASTER-DETAIL AKORDEON & MODÁLY)
+// =========================================================================
+window.superAdminSelectedGroupLeague = window.superAdminSelectedGroupLeague || "Tipsport Extraliga";
+window.superAdminCachedGroups = [];
+window.superAdminCachedUsers = [];
+
+window.renderSuperAdminGroups = async () => {
+    const contentArea = document.getElementById('superAdminTabContentArea');
+    if (!contentArea) return;
+
+    const store = Alpine.store('appState');
+    const sezonaId = store?.activeSeason || window.SEZONA_ID || "2026_2027";
+    const selectedLeague = window.superAdminSelectedGroupLeague;
+
+    contentArea.innerHTML = '<div class="db-empty-msg" style="color: #38bdf8;">Načítám partičky... ⏳</div>';
+
+    try {
+        const { query, collection, where, getDocs } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js");
+        
+        // 1. Zaručené načtení kompletní soupisky (hráči + správci + přihlášený SuperAdmin)
+        const rosterUsers = store?.adminUsers || [];
+        const rosterManagers = store?.adminManagers || [];
+        const usersMap = new Map();
+
+        [...rosterUsers, ...rosterManagers].forEach(u => {
+            const uid = u.id || u.uid;
+            if (uid && u.nickname) {
+                usersMap.set(uid, { uid: uid, nickname: u.nickname });
+            }
+        });
+
+        const myUid = window.auth?.currentUser?.uid;
+        if (myUid && store?.nickname) {
+            usersMap.set(myUid, { uid: myUid, nickname: store.nickname });
+        }
+
+        let allUsers = Array.from(usersMap.values());
+        allUsers.sort((a, b) => a.nickname.localeCompare(b.nickname, "cs"));
+        window.superAdminCachedUsers = allUsers;
+
+        // 2. Načtení skupin pro vybranou ligu z Realtime Database (0 Firestore reads)
+        const { ref, get } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js");
+        const ligaKlic = String(selectedLeague).replace(/ /g, "_");
+        const snap = await get(ref(window.rtdb, `skupiny/${sezonaId}/${ligaKlic}`));
+        const skupinyObj = snap.exists() ? (snap.val() || {}) : {};
+        const skupiny = Object.entries(skupinyObj).map(([id, data]) => ({ id, ...data }));
+        window.superAdminCachedGroups = skupiny;
+
+        const LEAGUES = CONFIG.MASTER_LEAGUES || ["Chance Liga", "Premier League", "Liga mistrů", "Tipsport Extraliga", "MS v hokeji", "MS ve fotbale"];
+
+        let groupsHtml = `
+            <div class="groups-admin-wrapper">
+                <div class="groups-admin-topbar">
+                    <label style="font-size: 0.74rem; font-weight: bold; color: #fbbf24; text-transform: uppercase;">Zvol soutěž pro správu partiček:</label>
+                    <select id="superadmin-group-league-sel" class="bonus-text-input" style="height: 38px; background: #111827; color: #fff; font-weight: bold; padding: 0 10px; width: 100%; margin: 0;" onchange="window.superAdminSelectedGroupLeague = this.value; window.renderSuperAdminGroups();">
+                        ${LEAGUES.map(l => `<option value="${l}" ${l === selectedLeague ? 'selected' : ''}>${(l.includes('Extraliga') || l.includes('hokej')) ? '🏒' : '⚽'} ${l.toUpperCase()}</option>`).join('')}
+                    </select>
+                </div>
+
+                <!-- ➕ ROLETKA PRO ZALOŽENÍ (VŽDY ZAVŘENÁ PŘI VSTUPU) -->
+                <div class="groups-create-collapsible">
+                    <button type="button" class="group-create-toggle-btn" onclick="const c = document.getElementById('admin-group-create-collapse'); const isHidden = c.style.display === 'none'; c.style.display = isHidden ? 'block' : 'none'; this.querySelector('.arrow').innerText = isHidden ? '▲' : '▼';">
+                        <span>+ ZALOŽIT NOVOU PARTIČKU</span>
+                        <span class="arrow">▼</span>
+                    </button>
+                    <div id="admin-group-create-collapse" style="display: none;" class="group-create-collapse-body">
+                        <div class="groups-create-row">
+                            <input type="text" id="admin-new-group-name" placeholder="Název partičky..." class="groups-create-input">
+                            <button type="button" class="groups-create-btn" onclick="window.adminCreateGroupAction()">VYTVOŘIT</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 📋 SEZNAM PARTIČEK V JEDNOŘÁDKOVÉM POHLEDU -->
+                <div class="groups-list-grid">
+                    ${skupiny.length === 0 ? '<div class="db-empty-msg" style="padding: 25px; background: #111827; border-radius: 10px; border: 1px dashed #374151;">V této lize zatím není založená žádná partička.</div>' : ''}
+        `;
+
+        skupiny.forEach(grp => {
+            const clenoveArr = Array.isArray(grp.clenove) ? grp.clenove : [];
+
+            groupsHtml += `
+                <div class="leaderboard-row-wrapper">
+                    <!-- 1. JEDNOŘÁDKOVÝ HLAVNÍ TRIGGER -->
+                    <div class="group-admin-card-head" onclick="const det = this.nextElementSibling; const arr = this.querySelector('.group-arrow-icon'); if(det.style.display==='none'){det.style.display='flex'; arr.innerText='▲';}else{det.style.display='none'; arr.innerText='▼';}">
+                        <div class="group-admin-row-left">
+                            <span class="group-admin-row-name" title="${window.escapeHTML(grp.nazev)}">${window.escapeHTML(grp.nazev)}</span>
+                        </div>
+                        <div class="group-admin-row-right">
+                            <span class="group-status-pill ${String(grp.status || '').toLowerCase()}">${grp.status || 'ACTIVE'}</span>
+                            <span class="group-count-pill">${clenoveArr.length} 👤</span>
+                            <span class="group-arrow-icon">▼</span>
+                        </div>
+                    </div>
+
+                    <!-- 2. ROZBALENÝ DETAIL POD TÍM -->
+                    <div class="group-admin-dropdown" style="display: none;">
+                        <div class="group-detail-fullname">${window.escapeHTML(grp.nazev)}</div>
+                        
+                        <div class="group-code-card">
+                            <div class="group-code-info">
+                                <span>KÓD PARTY:</span>
+                                <strong>${grp.kod || grp.id}</strong>
+                            </div>
+                            <button type="button" class="group-copy-btn" onclick="window.copyGroupCode('${grp.kod || grp.id}')">📋 KOPÍROVAT KÓD</button>
+                        </div>
+
+                        <div class="group-detail-actions-row">
+                            <button type="button" class="group-btn-secondary" onclick="window.openGroupMembersModal('${grp.id}')">👥 ČLENOVÉ (${clenoveArr.length})</button>
+                            <button type="button" class="group-btn-primary" onclick="window.openGroupAddMembersModal('${grp.id}')">➕ PŘIŘADIT HRÁČE</button>
+                        </div>
+
+                        <div class="group-danger-strip" style="display: flex; justify-content: space-between; align-items: center;">
+                            <button type="button" class="group-copy-btn" style="background: transparent; border: 1px solid #38bdf8; color: #38bdf8;" onclick="window.openRenameGroupModal('${grp.id}', '${window.escapeHTML(grp.nazev)}')">✏️ PŘEJMENOVAT</button>
+                            <button type="button" class="group-danger-link" onclick="window.adminDeleteGroupAction('${grp.id}')">Smazat tuto partičku</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        groupsHtml += `</div></div>`;
+        contentArea.innerHTML = groupsHtml;
+    } catch (e) {
+        console.error("Chyba při načítání skupin v SuperAdminu:", e);
+        contentArea.innerHTML = `<div class="db-empty-msg" style="color: #f87171;">Chyba při načítání skupin: ${e.message}</div>`;
+    }
+};
+
+// 📋 KOPÍROVÁNÍ KÓDU DO SCHRÁNKY
+window.copyGroupCode = (kod) => {
+    navigator.clipboard.writeText(kod).then(() => {
+        window.showToast(`📋 Kód party ${kod} zkopírován!`);
+    }).catch(() => {
+        window.showToast(`Kód party: ${kod}`);
+    });
+};
+
+// 👤 MODÁL 1: PŘEHLEDNÁ SOUPISKA ČLENŮ PARTY
+window.openGroupMembersModal = (groupId) => {
+    const grp = window.superAdminCachedGroups?.find(g => g.id === groupId);
+    if (!grp) return;
+
+    const allUsers = window.superAdminCachedUsers || [];
+    const clenoveArr = Array.isArray(grp.clenove) ? grp.clenove : [];
+
+    const membersRows = clenoveArr.map(mUid => {
+        const uObj = allUsers.find(u => u.uid === mUid);
+        const isOwner = (mUid === grp.autorUid);
+        const isMe = (mUid === window.auth?.currentUser?.uid);
+        const nick = isMe 
+            ? (Alpine.store('appState')?.nickname || uObj?.nickname || "Hráč") 
+            : (uObj?.nickname || "Hráč");
+
+        return `
+            <div class="group-modal-member-row">
+                <div style="display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
+                    <strong style="color: #ffffff;">${window.escapeHTML(nick)}</strong>
+                    ${isOwner ? '<span class="group-admin-tag">ADMIN</span>' : ''}
+                </div>
+                <div class="group-modal-member-actions">
+                    ${!isOwner ? `<button type="button" class="group-modal-admin-btn" onclick="window.adminSetGroupAdminAction('${groupId}', '${mUid}', '${window.escapeHTML(nick)}')">PŘEDAT ADMINA</button>` : ''}
+                    <button type="button" class="group-modal-remove-btn" onclick="window.adminRemoveMemberAction('${groupId}', '${mUid}')">ODEBRAT</button>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    const modalHtml = `
+        <div style="padding: 10px; width: 100%; box-sizing: border-box; text-align: left;">
+            <div style="font-size: 0.8rem; color: #9ca3af; margin-bottom: 10px;">
+                Celkem členů: <strong style="color: #34d399;">${clenoveArr.length}</strong>
+            </div>
+            <div class="group-modal-members-list">
+                ${membersRows || '<div style="color: #64748b; font-size: 0.85rem; text-align: center; padding: 20px;">Žádní členové v partě.</div>'}
+            </div>
+            <div style="margin-top: 14px; display: flex; justify-content: flex-end;">
+                <button type="button" class="action-btn" style="background: #374151; height: 38px; padding: 0 16px; font-family: 'Oswald', sans-serif; font-size: 0.8rem; margin: 0; width: auto; border-radius: 6px;" onclick="this.closest('.spy-modal-overlay').remove()">ZAVŘÍT</button>
+            </div>
+        </div>
+    `;
+
+    window.openGlobalUiModal(`ČLENOVÉ: ${grp.nazev.toUpperCase()}`, modalHtml);
+};
+
+// 📋 MODÁL 2: HROMADNÉ PŘIŘAZENÍ HRÁČŮ ZE SOUPISKY (CHECKLIST)
+window.openGroupAddMembersModal = (groupId) => {
+    const grp = window.superAdminCachedGroups?.find(g => g.id === groupId);
+    if (!grp) return;
+
+    const allUsers = window.superAdminCachedUsers || [];
+    const clenoveArr = Array.isArray(grp.clenove) ? grp.clenove : [];
+    const availableUsers = allUsers.filter(u => !clenoveArr.includes(u.uid));
+
+    if (availableUsers.length === 0) {
+        window.showToast("Všichni hráči ze soupisky už v této partě jsou! 🎯", true);
+        return;
+    }
+
+    const checklistRows = availableUsers.map(u => `
+        <label class="group-checklist-row" data-nick="${window.escapeHTML(u.nickname.toLowerCase())}">
+            <input type="checkbox" value="${u.uid}" class="group-add-check" onchange="window.updateAddMembersCount()">
+            <span>${window.escapeHTML(u.nickname)}</span>
+        </label>
+    `).join("");
+
+    const modalHtml = `
+        <div class="group-checklist-modal-wrapper" style="padding: 10px;">
+            <input type="text" placeholder="🔍 Hledat hráče podle jména..." class="group-checklist-search" oninput="window.filterGroupAddMembers(this.value)">
+            
+            <div id="group-add-members-checklist" class="group-checklist-container">
+                ${checklistRows}
+            </div>
+
+            <button type="button" id="group-submit-add-btn" class="group-checklist-submit-btn" onclick="window.adminSubmitAddMembers('${groupId}')">
+                PŘIŘADIT VYBRANÉ (0)
+            </button>
+        </div>
+    `;
+
+    window.openGlobalUiModal(`PŘIŘADIT DO: ${grp.nazev.toUpperCase()}`, modalHtml);
+};
+
+// Filtrování v checklistu modálu
+window.filterGroupAddMembers = (query) => {
+    const q = (query || "").toLowerCase().trim();
+    document.querySelectorAll(".group-checklist-row").forEach(el => {
+        const nick = el.getAttribute("data-nick") || "";
+        el.style.display = nick.includes(q) ? "flex" : "none";
+    });
+};
+
+// Počítadlo zaškrtnutých hráčů
+window.updateAddMembersCount = () => {
+    const checked = document.querySelectorAll(".group-add-check:checked");
+    const btn = document.getElementById("group-submit-add-btn");
+    if (btn) btn.innerText = `PŘIŘADIT VYBRANÉ (${checked.length})`;
+};
+
+// Odeslání hromadného přiřazení
+window.adminSubmitAddMembers = async (groupId) => {
+    const checked = Array.from(document.querySelectorAll(".group-add-check:checked")).map(el => el.value);
+    const leagueName = window.superAdminSelectedGroupLeague;
+
+    if (checked.length === 0) {
+        window.showToast("Zaškrtni alespoň jednoho hráče! ⚠️", true);
+        return;
+    }
+
+    const btn = document.getElementById("group-submit-add-btn");
+    if (btn) {
+        btn.disabled = true;
+        btn.innerText = "⏳ PŘIŘAZUJI...";
+    }
+
+    window.showToast(`⏳ Přiřazuji ${checked.length} hráčů do party...`, false);
+    try {
+        const adminManageGroupCF = httpsCallable(window.functions, "adminManageGroupCF");
+        const res = await adminManageGroupCF({
+            action: "addMember",
+            groupId: groupId,
+            targetUids: checked,
+            leagueName: leagueName
+        });
+
+        document.querySelectorAll(".dynamic-global-modal").forEach(el => el.remove());
+        window.showToast(res.data?.message || "✅ Hráči úspěšně přiřazeni!");
+        window.renderSuperAdminGroups();
+    } catch (e) {
+        console.error("Chyba při hromadném přiřazení:", e);
+        window.showToast("❌ Chyba: " + (e.message || "Server požadavek zamítl"), true);
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = `PŘIŘADIT VYBRANÉ (${checked.length})`;
+        }
+    }
+};
+
+window.adminCreateGroupAction = async () => {
+    const input = document.getElementById("admin-new-group-name");
+    const val = input ? input.value.trim() : "";
+    const leagueName = window.superAdminSelectedGroupLeague;
+
+    if (!val) {
+        window.showToast("Zadej název partičky! ⚠️", true);
+        return;
+    }
+
+    window.showToast("⏳ Zakládám partičku přes Cloud...", false);
+    try {
+        const adminManageGroupCF = httpsCallable(window.functions, "adminManageGroupCF");
+        const res = await adminManageGroupCF({
+            action: "create",
+            leagueName: leagueName,
+            nazev: val,
+            status: "ACTIVE"
+        });
+        window.showToast(res.data?.message || "✅ Partička úspěšně založena!");
+        if (input) input.value = "";
+        window.renderSuperAdminGroups();
+    } catch (e) {
+        console.error("Chyba při zakládání skupiny:", e);
+        window.showToast("❌ Chyba: " + (e.message || "Server požadavek zamítl"), true);
+    }
+};
+
+window.adminRemoveMemberAction = async (groupId, targetUid) => {
+    if (!confirm("Opravdu chceš tohoto hráče z partičky odebrat?")) return;
+    const leagueName = window.superAdminSelectedGroupLeague;
+
+    window.showToast("⏳ Odebírám hráče z party...", false);
+    try {
+        const adminManageGroupCF = httpsCallable(window.functions, "adminManageGroupCF");
+        const res = await adminManageGroupCF({
+            action: "removeMember",
+            groupId: groupId,
+            targetUid: targetUid,
+            leagueName: leagueName
+        });
+        
+        document.querySelectorAll(".dynamic-global-modal").forEach(el => el.remove());
+        window.showToast(res.data?.message || "🗑️ Hráč odebrán!");
+        await window.renderSuperAdminGroups();
+    } catch (e) {
+        console.error("Chyba při odebírání hráče:", e);
+        window.showToast("❌ Chyba: " + (e.message || "Server požadavek zamítl"), true);
+    }
+};
+
+window.adminSetGroupAdminAction = async (groupId, targetUid, targetNick) => {
+    if (!confirm(`Opravdu chceš roli ADMINA této partičky předat hráči ${targetNick}?`)) return;
+    const leagueName = window.superAdminSelectedGroupLeague;
+
+    window.showToast("⏳ Nastavuji nového admina party...", false);
+    try {
+        const adminManageGroupCF = httpsCallable(window.functions, "adminManageGroupCF");
+        const res = await adminManageGroupCF({
+            action: "setGroupAdmin",
+            groupId: groupId,
+            targetUid: targetUid,
+            leagueName: leagueName
+        });
+
+        document.querySelectorAll(".dynamic-global-modal").forEach(el => el.remove());
+        window.showToast(res.data?.message || "✅ Správce partičky byl změněn!");
+        await window.renderSuperAdminGroups();
+    } catch (e) {
+        console.error("Chyba při změně admina party:", e);
+        window.showToast("❌ Chyba: " + (e.message || "Server požadavek zamítl"), true);
+    }
+};
+
+window.adminDeleteGroupAction = async (groupId) => {
+    if (!confirm("🚨 OPRAVDU CHCEŠ TUTO PARTIČKU TRVALE SMAZAT?\n\nSmaže se z databáze i statický žebříček z Cloudflare R2!")) return;
+    const leagueName = window.superAdminSelectedGroupLeague;
+
+    window.showToast("⏳ Mažu partičku ze všech systémů...", false);
+    try {
+        const adminManageGroupCF = httpsCallable(window.functions, "adminManageGroupCF");
+        const res = await adminManageGroupCF({
+            action: "deleteGroup",
+            groupId: groupId,
+            leagueName: leagueName
+        });
+        window.showToast(res.data?.message || "🗑️ Partička byla smazána!");
+        window.renderSuperAdminGroups();
+    } catch (e) {
+        console.error("Chyba při mazání skupiny:", e);
+        window.showToast("❌ Chyba: " + (e.message || "Server požadavek zamítl"), true);
+    }
+};
+
 // ADMIN: RUČNÍ ZALOŽENÍ ZÁPASU
 window.adminCreateMatch = async (leagueName) => {
     const domaci = document.getElementById('admin-new-domaci').value.trim();
@@ -610,11 +983,14 @@ window.saveRealResult = async (matchId) => {
     }
 
     try {
-        await updateDoc(doc(window.db, 'ligy', activeAdminLeague, 'sezony', sezonaId, 'zapasy', matchId), {
+        const saveMatchResultCF = httpsCallable(window.functions, 'saveMatchResultCF');
+        await saveMatchResultCF({
+            leagueName: activeAdminLeague,
+            matchId: matchId,
             vysledek_domaci: dVal,
             vysledek_hoste: hVal,
             postup: postupVal,
-            apiStatus: "FINISHED"
+            sezonaId: sezonaId
         });
 
         window.showToast("⚙️ Skóre uloženo!");
@@ -955,6 +1331,7 @@ window.renderSuperAdmin = async (targetTab = null) => {
     const tab = window.superAdminActiveTab;
 
     const btnStyleUsers = tab === 'users' ? 'background: #059669; color: white; border-color: #10b981;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;';
+    const btnStyleGroups = tab === 'groups' ? 'background: #0891b2; color: white; border-color: #06b6d4;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;';
     const btnStyleMatches = tab === 'matches' ? 'background: #2563eb; color: white; border-color: #60a5fa;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;';
     const btnStyleTools = tab === 'tools' ? 'background: #ea580c; color: white; border-color: #f97316;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;';
     const btnStyleOdds = tab === 'odds' ? 'background: #d97706; color: white; border-color: #fbbf24;' : 'background: #1f2937; color: #9ca3af; border-color: #374151;';
@@ -963,16 +1340,19 @@ window.renderSuperAdmin = async (targetTab = null) => {
     container.innerHTML = `
         <div class="leaderboard-tabs-wrapper" style="margin-bottom: 15px; width: 100%; box-sizing: border-box; display: flex; gap: 4px;">
             <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 2px; font-size: 0.72rem; ${btnStyleUsers}" onclick="window.switchSuperAdminTab('users');">
-                👥 UŽIVATELÉ
+                UŽIVATELÉ
+            </button>
+            <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 2px; font-size: 0.72rem; ${btnStyleGroups}" onclick="window.switchSuperAdminTab('groups');">
+                PARTIČKY
             </button>
             <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 2px; font-size: 0.72rem; ${btnStyleMatches}" onclick="window.switchSuperAdminTab('matches');">
-                ⚽ ZÁPASY
+                ZÁPASY
             </button>
             <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 2px; font-size: 0.72rem; ${btnStyleTools}" onclick="window.switchSuperAdminTab('tools');">
-                🔧 ZÁCHRANA
+                ZÁCHRANA
             </button>
-            <button class="nav-btn-leaderboard" style="flex: 1.1; height: 38px; padding: 0 2px; font-size: 0.72rem; position: relative; ${btnStyleOdds}" onclick="window.switchSuperAdminTab('odds');">
-                📊 KURZY ${missingCount > 0 ? `<span style="background:#ef4444; color:#fff; border-radius:10px; padding:1px 5px; font-size:0.65rem; margin-left:2px; font-weight:800;">${missingCount}</span>` : ''}
+            <button class="nav-btn-leaderboard" style="flex: 1; height: 38px; padding: 0 2px; font-size: 0.72rem; position: relative; ${btnStyleOdds}" onclick="window.switchSuperAdminTab('odds');">
+                KURZY ${missingCount > 0 ? `<span style="background:#ef4444; color:#fff; border-radius:10px; padding:1px 5px; font-size:0.65rem; margin-left:2px; font-weight:800;">${missingCount}</span>` : ''}
             </button>
         </div>
         <div id="superAdminTabContentArea" style="width:100%;"></div>
@@ -980,6 +1360,11 @@ window.renderSuperAdmin = async (targetTab = null) => {
 
     const contentArea = document.getElementById('superAdminTabContentArea');
     if (!contentArea) return;
+
+    if (tab === 'groups') {
+        window.renderSuperAdminGroups();
+        return;
+    }
 
     if (tab === 'matches') {
         contentArea.innerHTML = '<div id="superAdminMatchesMountPoint"></div>';
@@ -1145,6 +1530,95 @@ window.renderSuperAdmin = async (targetTab = null) => {
 
 window.renderSuperAdminScreen = window.renderSuperAdmin;
 
+// ⏱️ FORMÁTOVAČE AKTIVITY A PŘÍTOMNOSTI (SDÍLENÉ PRO OKAMŽITÝ WEBSOCKET PATCH)
+const formatujAktivituTimestamp = (ts) => {
+    if (!ts) return '<span style="color: #6b7280; font-size: 0.75rem; font-family: monospace;">⏳ Nikdy</span>';
+    let d = new Date(ts);
+    if (isNaN(d.getTime())) return '<span style="color: #6b7280; font-size: 0.75rem; font-family: monospace;">⏳ Nikdy</span>';
+
+    const cas = d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+    const nyni = new Date();
+    const dnesPolnoc = new Date(nyni.getFullYear(), nyni.getMonth(), nyni.getDate());
+    const vceraPolnoc = new Date(dnesPolnoc);
+    vceraPolnoc.setDate(vceraPolnoc.getDate() - 1);
+
+    if (d >= dnesPolnoc) {
+        return `<span style="color: #38bdf8; font-weight: bold; font-size: 0.75rem; font-family: monospace;">Dnes ${cas}</span>`;
+    } else if (d >= vceraPolnoc) {
+        return `<span style="color: #fbbf24; font-size: 0.75rem; font-family: monospace;">Včera ${cas}</span>`;
+    } else {
+        const datumStr = `${d.getDate()}. ${d.getMonth() + 1}.`;
+        return `<span style="color: #9ca3af; font-size: 0.75rem; font-family: monospace;">${datumStr} ${cas}</span>`;
+    }
+};
+
+const formatujAktivitu = (lastSeen, uid) => {
+    const store = Alpine.store('appState');
+    const presence = store?.communityPresenceMap?.[uid];
+
+    if (presence?.online === true || store?.onlineUidsSet?.has(uid)) {
+        return '<span style="color: #34d399; font-weight: bold; font-size: 0.75rem; font-family: monospace; display: inline-flex; align-items: center; gap: 4px;">🟢 Online</span>';
+    }
+
+    let d = null;
+    if (presence && presence.lastSeen) {
+        d = new Date(presence.lastSeen);
+    } else if (lastSeen) {
+        if (typeof lastSeen.toDate === 'function') d = lastSeen.toDate();
+        else if (lastSeen.seconds) d = new Date(lastSeen.seconds * 1000);
+        else d = new Date(lastSeen);
+    }
+
+    if (!d || isNaN(d.getTime())) return '<span style="color: #6b7280; font-size: 0.75rem; font-family: monospace;">⏳ Nikdy</span>';
+
+    const cas = d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+    const nyni = new Date();
+    const dnesPolnoc = new Date(nyni.getFullYear(), nyni.getMonth(), nyni.getDate());
+    const vceraPolnoc = new Date(dnesPolnoc);
+    vceraPolnoc.setDate(vceraPolnoc.getDate() - 1);
+
+    if (d >= dnesPolnoc) {
+        return `<span style="color: #38bdf8; font-weight: bold; font-size: 0.75rem; font-family: monospace;">Dnes ${cas}</span>`;
+    } else if (d >= vceraPolnoc) {
+        return `<span style="color: #fbbf24; font-size: 0.75rem; font-family: monospace;">Včera ${cas}</span>`;
+    } else {
+        const datumStr = `${d.getDate()}. ${d.getMonth() + 1}.`;
+        return `<span style="color: #9ca3af; font-size: 0.75rem; font-family: monospace;">${datumStr} ${cas}</span>`;
+    }
+};
+
+// ⚡ REAKTIVNÍ WEBSOCKET DISPEČER PRO SUPERADMINA (0 FIRESTORE READS, 0 MS RELOAD)
+window.obnovZivouPritomnostSuperAdmin = () => {
+    const store = Alpine.store('appState');
+    if (!store || store.currentScreen !== 'superAdminScreen' || store.superAdminActiveTab !== 'users') return;
+
+    // 1. Živá aktualizace stavu hostů
+    const gBadge = document.getElementById('superadmin-guest-badge');
+    const gOnline = store.guestOnlineCount || 0;
+    const gTotal = store.guestTotalVisits || 0;
+    const gLastSeen = store.guestLastSeen;
+
+    if (gBadge) {
+        gBadge.innerHTML = gOnline > 0 
+            ? `<span style="color: #34d399; font-weight: bold; font-size: 0.75rem; font-family: monospace;">🟢 ${gOnline} online</span>` 
+            : formatujAktivituTimestamp(gLastSeen);
+    }
+    const gCountEl = document.getElementById('superadmin-guest-online-count');
+    if (gCountEl) gCountEl.innerText = `${gOnline} ${gOnline === 1 ? 'host' : (gOnline >= 2 && gOnline <= 4 ? 'hosté' : 'hostů')}`;
+    const gTotalEl = document.getElementById('superadmin-guest-total-count');
+    if (gTotalEl) gTotalEl.innerText = `${gTotal}×`;
+    const gLastEl = document.getElementById('superadmin-guest-last-seen');
+    if (gLastEl) gLastEl.innerHTML = formatujAktivituTimestamp(gLastSeen);
+
+    // 2. Chirurgická live aktualizace stavu každého hráče na obrazovce
+    document.querySelectorAll('.superadmin-user-status-slot').forEach(slot => {
+        const uid = slot.id.replace('user-status-slot-', '');
+        if (!uid) return;
+        const uData = (store.adminUsers || []).find(u => u.id === uid);
+        slot.innerHTML = formatujAktivitu(uData?.lastSeen, uid);
+    });
+};
+
 // 🎨 RENDERER SOUPISKY UŽIVATELŮ V SUPER ADMIN PANELU
 window.vykresliSuperAdminUzivatele = (docsArray) => {
     const contentArea = document.getElementById('superAdminTabContentArea');
@@ -1162,28 +1636,6 @@ window.vykresliSuperAdminUzivatele = (docsArray) => {
     const guestOnline = store?.guestOnlineCount || 0;
     const guestTotal = store?.guestTotalVisits || 0;
     const guestLastSeen = store?.guestLastSeen;
-
-    const formatujAktivituTimestamp = (ts) => {
-        if (!ts) return '<span style="color: #6b7280; font-size: 0.75rem; font-family: monospace;">⏳ Nikdy</span>';
-        let d = new Date(ts);
-        if (isNaN(d.getTime())) return '<span style="color: #6b7280; font-size: 0.75rem; font-family: monospace;">⏳ Nikdy</span>';
-
-        const cas = d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
-        const nyni = new Date();
-        const dnesPolnoc = new Date(nyni.getFullYear(), nyni.getMonth(), nyni.getDate());
-        const vceraPolnoc = new Date(dnesPolnoc);
-        vceraPolnoc.setDate(vceraPolnoc.getDate() - 1);
-
-        if (d >= dnesPolnoc) {
-            return `<span style="color: #38bdf8; font-weight: bold; font-size: 0.75rem; font-family: monospace;">Dnes ${cas}</span>`;
-        } else if (d >= vceraPolnoc) {
-            return `<span style="color: #fbbf24; font-size: 0.75rem; font-family: monospace;">Včera ${cas}</span>`;
-        } else {
-            const datumStr = `${d.getDate()}. ${d.getMonth() + 1}.`;
-            return `<span style="color: #9ca3af; font-size: 0.75rem; font-family: monospace;">${datumStr} ${cas}</span>`;
-        }
-    };
-
     const guestLastSeenHtml = formatujAktivituTimestamp(guestLastSeen);
 
     // 👤 SYSTÉMOVÝ ŘÁDEK TELEMETRIE ANONYMNÍCH HOSTŮ NA VRCHOLU SOUPISKY
@@ -1307,7 +1759,9 @@ window.vykresliSuperAdminUzivatele = (docsArray) => {
                     ${badgeHtml}
                 </div>
                 <div class="leaderboard-row-right" style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
-                    ${aktivitaHtml}
+                    <div class="superadmin-user-status-slot" id="user-status-slot-${uid}">
+                        ${aktivitaHtml}
+                    </div>
                     <span class="super-arrow-icon" style="color: #9ca3af; font-size: 0.78rem;">▼</span>
                 </div>
             </div>
@@ -1578,7 +2032,7 @@ window.openLoutkovodicModal = (uid, allowAdmin = false) => {
                || window.adminUsersCache?.find(u => u.id === uid)
                || {};
     
-    if (uItem.isSuperAdmin) {
+    if (!store.isSuperAdmin && uItem.isSuperAdmin) {
         window.showToast("⛔ Účet Super Admina nelze ovládat přes Loutkovodiče!", true);
         return;
     }

@@ -3,13 +3,16 @@
 // =========================================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app-check.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, doc, getDoc, setDoc, onSnapshot, updateDoc, serverTimestamp, disableNetwork, enableNetwork } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, doc, getDoc, setDoc, onSnapshot, updateDoc, serverTimestamp, disableNetwork, enableNetwork, setLogLevel } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 import { getFunctions } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-functions.js";
 import { CONFIG } from "./config.js";
 import { getActiveChangelog, formatChangelogDate } from "./changelog.js";
 
 import { getDatabase, ref as rtdbRef, onValue as onRtdbValue, update as rtdbUpdate } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
+
+// 🔇 UMLČENÍ VAROVÁNÍ SDK: Potlačí interní BloomFilter a cache warningy z konzole
+setLogLevel('error');
 
 export const app = initializeApp(CONFIG.FIREBASE_CONFIG);
 
@@ -57,6 +60,8 @@ const vstrikniStoresDoPameti = () => {
             const vybranaSezona = this.dostupneSezony.find(s => s.id === this.activeSeason);
             return vybranaSezona ? vybranaSezona.archived : false;
         },
+        dirtyTipsCount: 0,
+        incompleteTipsCount: 0,
         fanGraphics: localStorage.getItem('tipni_fan_graphics') === 'true',
         selectedLeague: null,
         selectedAdminLeague: null,
@@ -66,6 +71,35 @@ const vstrikniStoresDoPameti = () => {
         adminUsers: [],
         adminLeagues: [], // 🏒 Seznam lig, které smí přihlášený admin spravovat
         adminOpenedUserId: null, // 🔒 Držák otevřeného uživatele v Admin panelu (null = vše zavřeno)
+
+        // 👥 SOUKROMÉ PARTIČKY (FÁZE 3 UX ENGINE)
+        selectedGroupId: null, // null = celá liga / globál, jinak kód party
+        myGroupsList: [],
+        groupModalOpen: false,
+
+        get currentGroupTitle() {
+            if (!this.selectedGroupId) return 'Celá liga (Globální tabulka)';
+            const grp = this.myGroupsList.find(g => g.id === this.selectedGroupId || g.kod === this.selectedGroupId);
+            return grp ? grp.nazev : 'Moje partička';
+        },
+
+        get currentGroupRankText() {
+            if (!this.selectedGroupId) return '';
+            const grpData = this._groupLeaderboardData;
+            if (!grpData || !grpData.zebricek) return '';
+            const myUid = window.auth?.currentUser?.uid;
+            const myIdx = grpData.zebricek.findIndex(p => p.uid === myUid);
+            return myIdx !== -1 ? `(${myIdx + 1}. z ${grpData.zebricek.length})` : `(${grpData.zebricek.length} tipérů)`;
+        },
+
+        favGroupId: null, // ⚡ Okamžitá reaktivita: mění se přímo v paměti Alpine
+
+        get isCurrentGroupFav() {
+            if (!this.selectedGroupId) return this.favGroupId === 'GLOBAL';
+            return Boolean(this.selectedGroupId && this.selectedGroupId === this.favGroupId);
+        },
+
+        _groupLeaderboardData: null,
 
         // 🎯 LIGY, KTERÉ MÁ SPRÁVCE POVOLENÉ OVLÁDAT (Super Admin má vše, běžný admin jen své)
         get allowedAdminLeagues() {
@@ -97,8 +131,9 @@ const vstrikniStoresDoPameti = () => {
 
         // 🎭 LZE HRÁČE LOUTKOVODIT? (Nesmí být Super Admin a v mých ligách nesmí být správcem)
         canProxyUser(userItem) {
-            if (!userItem || userItem.isSuperAdmin) return false;
+            if (!userItem) return false;
             if (this.isSuperAdmin) return true;
+            if (userItem.isSuperAdmin) return false;
             const mojeLigy = this.allowedAdminLeagues || [];
             const jehoLigy = userItem.leagues || [];
             const jehoAdminLigy = userItem.adminLeagues || [];
@@ -134,14 +169,15 @@ const vstrikniStoresDoPameti = () => {
         communityTotal: (() => {
             try {
                 const h = JSON.parse(localStorage.getItem('tipni_cache_hof_' + (localStorage.getItem('savedSeason') || '2026_2027')) || 'null');
-                return (h?.all || h?.players || []).length || 35;
-            } catch(e) { return 35; }
+                return (h?.all || h?.players || []).length || 46;
+            } catch(e) { return 46; }
         })(),
         onlineUidsSet: new Set(),
         communityLastSeen: {},
 
         // 👀 REŽIM HOSTA & ANONYMNÍ TELEMETRIE (ZERO AUTH)
         isGuest: false,
+        showAllLeagues: localStorage.getItem('tipni_show_all_leagues') === 'true',
         guestOnlineCount: 0,
         guestTotalVisits: 0,
         guestLastSeen: null,
@@ -288,6 +324,7 @@ const vstrikniStoresDoPameti = () => {
         liveLeaguesMap: (() => {
             try { return JSON.parse(localStorage.getItem('tipni_cache_live_map') || '{}'); } catch(e) { return {}; }
         })(),
+        liveTicks: {}, // ⏱️ Přesné živé minuty zápasů z Realtime Database (0 Firestore Reads)
         isLeaguesReady: true, // ⚡ Okamžitý start: Zobrazí obsah ihned z disku telefonu
         _leagues: [],
         leagueFilterTick: 0,
@@ -350,34 +387,26 @@ const vstrikniStoresDoPameti = () => {
             return (l.includes('extraliga') || l.includes('hokej')) ? '🏒' : '⚽';
         },
 
-        // 🙈 INTELIGENTNÍ AUTOMATICKÝ FILTR & SEŘAZOVAČ LIG PODLE VOLBY HRÁČE
-        get leagues() {
-            const _tick = this.leagueFilterTick;
-            const MASTER_LIGY = CONFIG.MASTER_LEAGUES;
-            // 👁️ SuperAdmin i Host vidí kompletní nabídku všech soutěží
-            let zakladniSeznam = (this.isSuperAdmin || this.isGuest) ? MASTER_LIGY : [...(this._leagues || [])];
-
-            if (!zakladniSeznam || !Array.isArray(zakladniSeznam) || zakladniSeznam.length === 0) return [];
-
+        // 🔍 POMOCNÝ INTERNÍ FILTR A SEŘAZOVAČ PODLE POŘADÍ
+        _filtrujAseradLigy(seznam) {
+            if (!seznam || !Array.isArray(seznam) || seznam.length === 0) return [];
             const sezId = this.activeSeason || window.SEZONA_ID || "2026_2027";
-            const vyfiltrovane = zakladniSeznam.filter(liga => {
+            const vyfiltrovane = seznam.filter(liga => {
                 const lKlic = String(liga).replace(/ /g, "_");
                 try {
                     const cached = localStorage.getItem(`tipni_cache_rozpis_${sezId}_${lKlic}`);
                     if (cached) {
                         const parsed = JSON.parse(cached);
                         if (parsed && (parsed.hasMatches === false || (parsed.zapasyMapa && Object.keys(parsed.zapasyMapa).length === 0))) {
-                            return false; // Skrýt ligu bez zápasů
+                            return false;
                         }
                     } else {
-                        // 🛡️ SENIOR GUARD: Dokud prefetch nedokončí prověření všech lig z R2, neověřené ligy nezobrazujeme
                         if (!this.isLeaguesReady) return false;
                     }
                 } catch(e) {}
                 return true;
             });
 
-            // ↕️ APLIKACE UŽIVATELSKÉHO POŘADÍ (leagueOrder)
             const poradi = this.leagueOrder || [];
             if (poradi.length > 0 && !this.isGuest) {
                 vyfiltrovane.sort((a, b) => {
@@ -388,8 +417,32 @@ const vstrikniStoresDoPameti = () => {
                     return idxA - idxB;
                 });
             }
-
             return vyfiltrovane;
+        },
+
+        // 🏆 AKTIVNÍ SOUTĚŽE HRÁČE (VŽDY NAHOŘE)
+        get myEnrolledLeagues() {
+            const _tick = this.leagueFilterTick;
+            const MASTER_LIGY = CONFIG.MASTER_LEAGUES || [];
+            if (this.isSuperAdmin || this.isGuest) {
+                return this._filtrujAseradLigy(MASTER_LIGY);
+            }
+            return this._filtrujAseradLigy(this._leagues || []);
+        },
+
+        // 👀 NEAKTIVNÍ SOUTĚŽE K NAHLÉDNUTÍ (SHOWROOM DOLE)
+        get previewLeagues() {
+            const _tick = this.leagueFilterTick;
+            if (this.isSuperAdmin || this.isGuest || !this.showAllLeagues) return [];
+            const MASTER_LIGY = CONFIG.MASTER_LEAGUES || [];
+            const moje = this._leagues || [];
+            const kNahledu = MASTER_LIGY.filter(l => !moje.includes(l));
+            return this._filtrujAseradLigy(kNahledu);
+        },
+
+        // 🙈 CELKOVÝ SEZNAM PRO MENU A MODÁL ŘAZENÍ
+        get leagues() {
+            return [...this.myEnrolledLeagues, ...this.previewLeagues];
         },
 
         // 🔒 ZAMYKACÍ ZÁMEK: Vrátí true pouze pro soutěže, které má hráč schválené v licenci
@@ -599,8 +652,11 @@ const vstrikniStoresDoPameti = () => {
             return [];
         },
 
-        // Dynamická roletka pro Výsledky
+        // Dynamická roletka pro Výsledky (0ms bleskový odběr z R2 s lokálním fallbackem)
         get unikatniKolaVysledku() {
+            if (this._rozpisData?.unikatniKolaVysledku && Array.isArray(this._rozpisData.unikatniKolaVysledku) && this._rozpisData.unikatniKolaVysledku.length > 0) {
+                return this._rozpisData.unikatniKolaVysledku;
+            }
             const vyhodnocene = this.serazenaTimelineZapasu.filter(z => 
                 z.vysledek_domaci !== undefined && z.apiStatus !== 'IN_PLAY' && z.apiStatus !== 'PAUSED'
             );
@@ -609,14 +665,16 @@ const vstrikniStoresDoPameti = () => {
             return ['Poslední zápasy', ...unikatni.reverse()];
         },
 
-        // Dynamická roletka pro Program utkání (Ignoruje odložené zápasy bez nového data)
+        // Dynamická roletka pro Program utkání (0ms bleskový odběr z R2 s lokálním fallbackem)
         get unikatniKolaProgramu() {
+            if (this._rozpisData?.unikatniKolaProgramu && Array.isArray(this._rozpisData.unikatniKolaProgramu) && this._rozpisData.unikatniKolaProgramu.length > 0) {
+                return this._rozpisData.unikatniKolaProgramu;
+            }
             const budouci = this.serazenaTimelineZapasu.filter(z => {
                 const jeVyhodnoceny = (z.vysledek_domaci !== undefined && z.apiStatus !== 'IN_PLAY' && z.apiStatus !== 'PAUSED');
                 const obaNeznamy = (z.domaci === 'Neznámý' && z.hoste === 'Neznámý');
                 return !jeVyhodnoceny && !obaNeznamy && !this.jeZapasOdlozenyBezTerminu(z);
             });
-            // 📅 ČISTÁ CHRONOLOGIE: Kola se řadí podle data jejich nejbližšího neodehraného zápasu
             const kolaPoradi = [];
             const videno = new Set();
             budouci.forEach(z => {
@@ -743,22 +801,12 @@ const vstrikniStoresDoPameti = () => {
         get rozpisData() { return this._rozpisData; },
         set rozpisData(val) {
             this._rozpisData = val;
-            if (val && this.selectedLeague) {
-                const sezId = this.activeSeason || '2026_2027';
-                const lKlic = String(this.selectedLeague).replace(/ /g, '_');
-                try { localStorage.setItem(`tipni_cache_rozpis_${sezId}_${lKlic}`, JSON.stringify(val)); } catch(e){}
-            }
             this.obnovCacheTimeline();
         },
 
         get leaderboardData() { return this._leaderboardData; },
         set leaderboardData(val) {
             this._leaderboardData = val;
-            if (val && this.selectedLeague) {
-                const sezId = this.activeSeason || '2026_2027';
-                const lKlic = String(this.selectedLeague).replace(/ /g, '_');
-                try { localStorage.setItem(`tipni_cache_lb_${sezId}_${lKlic}`, JSON.stringify(val)); } catch(e){}
-            }
         }
     });
     
@@ -788,19 +836,50 @@ const vstrikniStoresDoPameti = () => {
                     store.leagueFilterTick++;
                 }
             }
+            if (typeof window.obnovZivouPritomnostSuperAdmin === 'function') {
+                window.obnovZivouPritomnostSuperAdmin();
+            }
         }
     });
 
-    const statsRef = rtdbRef(rtdb, 'stats/totalUsers');
-    onRtdbValue(statsRef, (snap) => {
-        const val = snap.val();
+    // ⏱️ ŽIVÉ MINUTY A STAV ZÁPASŮ (0 FIRESTORE READS, 0 KČ, WEBSOCKET PUSH)
+    const liveTicksRef = rtdbRef(rtdb, 'live_ticks');
+    // 🏛️ BLESKOVÝ RTDB STRÁŽCE SÍNĚ SLÁVY (0ms zpoždění při aktualizaci žebříčku)
+    const hofPulseRef = rtdbRef(rtdb, 'system/hof_pulse');
+    let isFirstHofPulse = true;
+    onRtdbValue(hofPulseRef, async (snap) => {
+        if (isFirstHofPulse) {
+            isFirstHofPulse = false;
+            return;
+        }
         const store = Alpine.store('appState');
-        if (store && typeof val === 'number' && val > 0) {
-            store.communityTotal = val;
+        if (!store) return;
+        const sezId = store.activeSeason || window.SEZONA_ID || "2026_2027";
+        try {
+            const res = await fetch(`${CONFIG.R2_BASE_URL}/sezony/${sezId}/hall_of_fame.json?v=${Date.now()}`);
+            if (res.ok) {
+                const freshHof = await res.json();
+                store.hallOfFameData = freshHof;
+                try { localStorage.setItem(`tipni_cache_hof_${sezId}`, JSON.stringify(freshHof)); } catch(e){}
+                const currentUid = window.auth?.currentUser?.uid;
+                const meInHof = (freshHof.all || freshHof.players)?.find(p => p.uid === currentUid);
+                if (meInHof) {
+                    store.myOvr = meInHof.masterOvr || meInHof.ovr;
+                    localStorage.setItem('tipni_cache_my_ovr', String(store.myOvr));
+                }
+                if (store.currentScreen === 'hallOfFameScreen' && typeof window.renderHallOfFame === 'function') {
+                    window.renderHallOfFame(window.hofActiveFilter || 'ALL');
+                }
+            }
+        } catch(e) {}
+    });
+    onRtdbValue(liveTicksRef, (snap) => {
+        const data = snap.val() || {};
+        const store = Alpine.store('appState');
+        if (store) {
+            store.liveTicks = data;
         }
     });
-
-    // 👀 ŽIVÁ TELEMETRIE ANONYMNÍCH HOSTŮ (RTDB WEBSOCKET - 0 READS Z FIRESTORE)
     const guestPresenceRef = rtdbRef(rtdb, 'guest_presence');
     onRtdbValue(guestPresenceRef, (snap) => {
         const data = snap.val() || {};
@@ -808,6 +887,9 @@ const vstrikniStoresDoPameti = () => {
         const store = Alpine.store('appState');
         if (store) {
             store.guestOnlineCount = count;
+            if (typeof window.obnovZivouPritomnostSuperAdmin === 'function') {
+                window.obnovZivouPritomnostSuperAdmin();
+            }
         }
     });
 
@@ -818,6 +900,9 @@ const vstrikniStoresDoPameti = () => {
         if (store) {
             store.guestTotalVisits = data.total || 0;
             store.guestLastSeen = data.lastSeen || null;
+            if (typeof window.obnovZivouPritomnostSuperAdmin === 'function') {
+                window.obnovZivouPritomnostSuperAdmin();
+            }
         }
     });
 
@@ -1266,19 +1351,38 @@ const initTipniToAlpine = () => {
                 if (window.globalLiveRozpisUnsubscribe) { window.globalLiveRozpisUnsubscribe(); window.globalLiveRozpisUnsubscribe = null; }
             }
             
-            if (screenName === 'leaguesScreen') {
-                document.documentElement.style.setProperty('--league-bg', 'none');
+            if (screenName === 'leaguesScreen' || screenName === 'hallOfFameScreen') {
+                document.querySelectorAll('.league-themed-screen').forEach(el => el.style.setProperty('--league-bg', 'none'));
             }
 
             if (screenName === 'hallOfFameScreen') {
                 store.selectedLeague = null;
                 store.selectedAdminLeague = null;
-                document.documentElement.style.setProperty('--league-bg', 'none');
                 if (typeof window.renderHallOfFame === 'function') {
                     window.renderHallOfFame('ALL');
                 }
                 const hofScreen = document.getElementById('hallOfFameScreen');
                 if (hofScreen) hofScreen.scrollTop = 0;
+                // 🚀 POZADÍ: Tichá kontrola čerstvosti dat z R2 (proti uvíznutí ve staré cache)
+                const sezId = store.activeSeason || window.SEZONA_ID || "2026_2027";
+                fetch(`${CONFIG.R2_BASE_URL}/sezony/${sezId}/hall_of_fame.json?v=${Date.now()}`)
+                    .then(res => res.ok ? res.json() : null)
+                    .then(freshHof => {
+                        if (freshHof) {
+                            store.hallOfFameData = freshHof;
+                            try { localStorage.setItem(`tipni_cache_hof_${sezId}`, JSON.stringify(freshHof)); } catch(e){}
+                            const currentUid = window.auth?.currentUser?.uid;
+                            const meInHof = (freshHof.all || freshHof.players)?.find(p => p.uid === currentUid);
+                            if (meInHof) {
+                                store.myOvr = meInHof.masterOvr || meInHof.ovr;
+                                localStorage.setItem('tipni_cache_my_ovr', String(store.myOvr));
+                            }
+                            if (store.currentScreen === 'hallOfFameScreen' && typeof window.renderHallOfFame === 'function') {
+                                window.renderHallOfFame(window.hofActiveFilter || 'ALL');
+                            }
+                        }
+                    })
+                    .catch(() => {});
             }
 
             if (screenName === 'leaderboardScreen' && typeof window.renderLeaderboard === 'function') {
@@ -1463,8 +1567,20 @@ const initTipniToAlpine = () => {
     };
 
     // =========================================================================
-    // ↕️ MANUÁLNÍ ŘAZENÍ SOUTĚŽÍ UŽIVATELE (S 24H COOLDOWN POJISTKOU)
+    // ↕️ MANUÁLNÍ ŘAZENÍ SOUTĚŽÍ & SHOWROOM TOGGLER
     // =========================================================================
+    window.toggleShowAllLeagues = (checked) => {
+        const store = Alpine.store('appState');
+        if (!store) return;
+        store.showAllLeagues = Boolean(checked);
+        localStorage.setItem('tipni_show_all_leagues', store.showAllLeagues ? 'true' : 'false');
+        store.leagueFilterTick++;
+        // Ihned aktualizujeme seznam v otevřeném modálu
+        if (store.reorderModalOpen) {
+            store.reorderList = [...store.leagues];
+        }
+    };
+
     window.openReorderLeaguesModal = () => {
         const store = Alpine.store('appState');
         if (!store || !store.leagues) return;
@@ -1650,6 +1766,9 @@ const initTipniToAlpine = () => {
                 if (pData && pData.ts && window.lastKnownPulsSignatures[leagueName] !== pData.ts) {
                     window.lastKnownPulsSignatures[leagueName] = pData.ts;
                     sosniDataZR2();
+                    if (pData.type === 'groups' && typeof window.nactiMojePartickyProLigu === 'function') {
+                        window.nactiMojePartickyProLigu(leagueName);
+                    }
                 }
             }, (err) => console.warn("RTDB Puls listener warning:", err));
 
@@ -1694,8 +1813,6 @@ const initTipniToAlpine = () => {
             window.obnovSluchatkoMojeTipy(currentUser.uid);
         }
 
-        store.leagueFilterTick++; // 🔔 Okamžitá reevaluace filtru lig pro novou sezónu
-
         if (store.selectedLeague) {
             if (window.globalLiveMenuUnsubscribe) { window.globalLiveMenuUnsubscribe(); window.globalLiveMenuUnsubscribe = null; }
             window.naplanujZiveKanaly(store.selectedLeague);
@@ -1707,28 +1824,33 @@ const initTipniToAlpine = () => {
     };
 
     // 🏎️ PROFI SENIOR LEAGUE SELECTOR (EAGER PARALLEL BOOTSTRAP / 0 ms LATENCY)
-    // 🚀 SYNCHRONNÍ PŘEPNUTÍ LIGY (V čase 0 ms prohodí data v RAM i obrazovku, menu odjíždí až nad novou ligou)
     window.handleMenuLeagueClick = (leagueName) => {
         window.selectLeague(leagueName);
     };
 
+    let isSelectingLeagueRunning = false;
+
     window.selectLeague = async (leagueName, targetScreen = 'matchesScreen') => {
+        if (!leagueName || isSelectingLeagueRunning) return;
+        isSelectingLeagueRunning = true;
+
         const store = Alpine.store('appState');
 
-        // 🛑 OCHRANA ROZPRACOVANÝCH TIPŮ PŘED PŘEPNUTÍM SOUTĚŽE
-        if (window.isAppFormDirty) {
-            if (store) store.isMenuOpen = false;
-            if (typeof window.zobrazVarovnyModal === 'function') {
-                window.zobrazVarovnyModal(() => {
-                    window.isAppFormDirty = false;
-                    window.selectLeague(leagueName, targetScreen);
-                });
-            } else {
+        try {
+            // 🛑 OCHRANA ROZPRACOVANÝCH TIPŮ: Pokud hráč odchází z ligy, varujeme ho
+            if (window.isAppFormDirty && store?.selectedLeague && store.selectedLeague !== leagueName) {
+                if (store) store.isMenuOpen = false;
+                if (typeof window.zobrazVarovnyModal === 'function') {
+                    window.zobrazVarovnyModal(() => {
+                        window.isAppFormDirty = false;
+                        if (window.dirtyInputsRegistry) window.dirtyInputsRegistry.clear();
+                        window.selectLeague(leagueName, targetScreen);
+                    });
+                    return;
+                }
                 window.isAppFormDirty = false;
-                window.selectLeague(leagueName, targetScreen);
+                if (window.dirtyInputsRegistry) window.dirtyInputsRegistry.clear();
             }
-            return;
-        }
 
             // 🔒 AUTO-RESET: Při změně ligy vždy startujeme se zavřenou roletkou rekordů i karet hráčů
             window.leaderboardRecordsOpen = false;
@@ -1739,15 +1861,14 @@ const initTipniToAlpine = () => {
             const memoryHit = store.leaguesMemoryCache?.[leagueName];
 
             if (memoryHit && memoryHit.rozpisData) {
-                store._rozpisData = memoryHit.rozpisData;
-                if (memoryHit.leaderboardData) store._leaderboardData = memoryHit.leaderboardData;
+                store.rozpisData = memoryHit.rozpisData;
+                if (memoryHit.leaderboardData) store.leaderboardData = memoryHit.leaderboardData;
                 if (memoryHit.cupData) {
                     if (!store.cupData) store.cupData = {};
                     store.cupData[leagueName] = memoryHit.cupData;
                     window.tipniCupData = window.tipniCupData || {};
                     window.tipniCupData[leagueName] = memoryHit.cupData;
                 }
-                store.obnovCacheTimeline();
                 maNacitanouKesi = true;
             } else {
                 // 💽 2. ÚROVEŇ: ZÁLOŽNÍ RYCHLÁ KONTROLA Z DISKU (LOCALSTORAGE)
@@ -1768,7 +1889,6 @@ const initTipniToAlpine = () => {
                 } catch (e) {}
             }
 
-            // Splash screen ukážeme POUZE tehdy, pokud data v RAM ani na disku vůbec neexistují
             if (!maNacitanouKesi && typeof window.showSplash === 'function') {
                 window.showSplash("Načítání...");
             }
@@ -1782,7 +1902,14 @@ const initTipniToAlpine = () => {
             }
 
             if (typeof window.getLeagueStadium === 'function') {
-                document.documentElement.style.setProperty('--league-bg', `url('${window.getLeagueStadium(leagueName)}')`);
+                const bgUrl = window.getLeagueStadium(leagueName);
+                const bgVal = bgUrl ? `url('${bgUrl}')` : 'none';
+                document.querySelectorAll('.league-themed-screen').forEach(el => el.style.setProperty('--league-bg', bgVal));
+            }
+
+            // 👥 PŘÍPRAVA PARTIČEK PRO TUTO LIGU
+            if (typeof window.nactiMojePartickyProLigu === 'function') {
+                window.nactiMojePartickyProLigu(leagueName);
             }
 
             // 🎯 BLESKOVÝ PROPOJOVAČ: Vytáhne z paměti tipy pro tuto vybranou ligu
@@ -1792,17 +1919,18 @@ const initTipniToAlpine = () => {
 
             localStorage.setItem('savedLeague', leagueName);
             localStorage.setItem('savedScreen', targetScreen);
-            
-            if (window.globalLiveMenuUnsubscribe) { window.globalLiveMenuUnsubscribe(); window.globalLiveMenuUnsubscribe = null; }
-            if (window.globalLiveRozpisUnsubscribe) { window.globalLiveRozpisUnsubscribe(); window.globalLiveRozpisUnsubscribe = null; }
-            window.liveSchedulerTimeout = window.liveSchedulerTimeout || null;
-            if (window.liveSchedulerTimeout) { clearTimeout(window.liveSchedulerTimeout); window.liveSchedulerTimeout = null; }
+
+            if (typeof window.globalLiveMenuUnsubscribe === 'function') { 
+                window.globalLiveMenuUnsubscribe(); 
+                window.globalLiveMenuUnsubscribe = null; 
+            }
+            if (window.liveSchedulerTimeout) { 
+                clearTimeout(window.liveSchedulerTimeout); 
+                window.liveSchedulerTimeout = null; 
+            }
 
             window.lastVerzeRozpisu = -1;
             window.lastVerzeZebricku = -1;
-
-            // 🚀 ČISTÁ REAKTIVITA: Zavřeme menu bez čekání, animace odjíždí plynule přes GPU
-            store.isMenuOpen = false;
 
             if (targetScreen === 'matchesScreen' && typeof window.renderMatches === 'function') {
                 window.renderMatches(leagueName);
@@ -1815,19 +1943,23 @@ const initTipniToAlpine = () => {
             const scr = document.getElementById(targetScreen);
             if (scr) scr.scrollTop = 0;
 
-            if (typeof window.hideSplash === 'function') {
-                window.hideSplash();
-            }
-
-            // 📡 NEBLOKUJÍCÍ RADAR: Živé kanály se napojí až v momentě, kdy je CPU po vykreslení zcela v klidu
+            // 📡 NEBLOKUJÍCÍ RADAR: Živé kanály se napojí na pozadí
             if ('requestIdleCallback' in window) {
                 window.requestIdleCallback(() => window.naplanujZiveKanaly(leagueName), { timeout: 1500 });
             } else {
-                requestAnimationFrame(() => {
-                    window.naplanujZiveKanaly(leagueName);
-                });
+                requestAnimationFrame(() => window.naplanujZiveKanaly(leagueName));
             }
-        };
+        } catch (err) {
+            console.error("❌ Kritická chyba při přepínání ligy:", err);
+            if (typeof window.showToast === 'function') {
+                window.showToast("Došlo k chybě při načítání soutěže ⚠️", true);
+            }
+        } finally {
+            if (store) store.isMenuOpen = false;
+            if (typeof window.hideSplash === 'function') window.hideSplash();
+            isSelectingLeagueRunning = false;
+        }
+    };
 
     // 🔮 TICHÝ NEBLOKUJÍCÍ PREFETCHER: Aktualizuje data na pozadí bez zdržení startu a bez probliknutí
     window.prefetchVsechnyLigy = async () => {
@@ -2015,6 +2147,9 @@ const initTipniToAlpine = () => {
             window.dirtyInputsRegistry.delete(klicRegistru);
         }
         window.isAppFormDirty = (window.dirtyInputsRegistry.size > 0);
+        if (typeof window.prepocitejPocitadlaTipu === 'function') {
+            window.prepocitejPocitadlaTipu();
+        }
     };
 
 // 🎯 POMOCNÝ VYTAHOVAČ A SYNCHRONIZÁTOR TIPŮ PRO VYBRANOU LIGU
@@ -2085,6 +2220,11 @@ document.addEventListener("visibilitychange", async () => {
         if (window.liveRadarIntervalGlobal) {
             clearInterval(window.liveRadarIntervalGlobal);
             window.liveRadarIntervalGlobal = null;
+        }
+
+        // 🛡️ TICHÝ ZÁCHRANNÝ AUTO-FLUSH: Pokud hráč zamkne mobil s neuloženými tipy, odešleme je na pozadí
+        if (store && store.currentScreen === 'matchesScreen' && store.dirtyTipsCount > 0 && store.selectedLeague && typeof window.saveAllUserTips === 'function') {
+            window.saveAllUserTips(store.selectedLeague, null, true);
         }
         if (window.liveIntervalRadar) {
             clearInterval(window.liveIntervalRadar);
@@ -2358,4 +2498,249 @@ window.getLeagueLogo = (liga) => {
     if (l.includes('chance')) return SAFE_SVG_FLAGS.cz;
     if (l.includes('extraliga')) return SAFE_SVG_FLAGS.cz;
     return SAFE_SVG_FLAGS.globe;
+};
+
+// =========================================================================
+// 👥 KONTROLER PRO CENTROVANÝ MODÁL A PŘEPÍNÁNÍ PARTIČEK
+// =========================================================================
+window.openGroupModal = () => {
+    const store = Alpine.store('appState');
+    if (store) store.groupModalOpen = true;
+};
+
+window.closeGroupModal = () => {
+    const store = Alpine.store('appState');
+    if (store) store.groupModalOpen = false;
+};
+
+// Kompatibilita
+window.openGroupSheet = window.openGroupModal;
+window.closeGroupSheet = window.closeGroupModal;
+
+window.selectGroup = async (groupId) => {
+    const store = Alpine.store('appState');
+    if (!store) return;
+    store.selectedGroupId = groupId;
+    store.groupModalOpen = false;
+
+    if (store.currentScreen === 'leaderboardScreen' && typeof window.renderLeaderboard === 'function') {
+        await window.renderLeaderboard();
+    }
+};
+
+window.toggleFavGroup = () => {
+    const store = Alpine.store('appState');
+    if (!store || !store.selectedLeague) return;
+    const targetId = store.selectedGroupId || 'GLOBAL';
+    const key = `tipni_fav_group_${store.selectedLeague}`;
+    if (store.isCurrentGroupFav) {
+        localStorage.removeItem(key);
+        store.favGroupId = null;
+        window.showToast(targetId === 'GLOBAL' ? "⭐ Výchozí zobrazení celé ligy zrušeno." : "⭐ Výchozí partička zrušena.");
+    } else {
+        localStorage.setItem(key, targetId);
+        store.favGroupId = targetId;
+        window.showToast(`⭐ "${store.currentGroupTitle}" nastavena jako výchozí!`);
+    }
+};
+
+window.toggleFavGroupFor = (groupId) => {
+    const store = Alpine.store('appState');
+    if (!store || !store.selectedLeague || !groupId) return;
+    const key = `tipni_fav_group_${store.selectedLeague}`;
+    if (store.favGroupId === groupId) {
+        localStorage.removeItem(key);
+        store.favGroupId = null;
+        window.showToast(groupId === 'GLOBAL' ? "⭐ Výchozí zobrazení celé ligy zrušeno." : "⭐ Výchozí partička zrušena.");
+    } else {
+        localStorage.setItem(key, groupId);
+        store.favGroupId = groupId;
+        window.showToast(groupId === 'GLOBAL' ? "⭐ Celá liga nastavena jako výchozí!" : "⭐ Partička nastavena jako výchozí!");
+    }
+};
+
+window.nactiMojePartickyProLigu = async (leagueName) => {
+    const store = Alpine.store('appState');
+    const uid = window.auth?.currentUser?.uid;
+    if (!store || !uid || !window.rtdb || !leagueName) return;
+
+    const ligaKlic = String(leagueName).replace(/ /g, "_");
+    try {
+        const { get, ref } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js");
+        const snap = await get(ref(window.rtdb, `user_groups/${uid}/${ligaKlic}`));
+        const rawObj = snap.exists() ? (snap.val() || {}) : {};
+        
+        // 1. Seřadíme partičky chronologicky podle času vstupu
+        store.myGroupsList = Object.entries(rawObj)
+            .map(([id, d]) => ({ id, ...d }))
+            .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+
+        // 2. Synchronizace hvězdičky z localStorage
+        const favId = localStorage.getItem(`tipni_fav_group_${leagueName}`);
+        store.favGroupId = favId || null;
+
+        // 3. Rozhodovací strom: Hvězdička má přednost -> jinak 1. partička -> jinak Globál
+        if (favId === 'GLOBAL') {
+            store.selectedGroupId = null;
+        } else if (favId && store.myGroupsList.some(g => g.id === favId || g.kod === favId)) {
+            store.selectedGroupId = favId;
+        } else if (store.myGroupsList.length > 0) {
+            store.selectedGroupId = store.myGroupsList[0].id || store.myGroupsList[0].kod;
+        } else {
+            store.selectedGroupId = null;
+        }
+    } catch(e) {
+        store.myGroupsList = [];
+        store.selectedGroupId = null;
+        store.favGroupId = null;
+    }
+};
+
+// ✏️ MODÁL PRO PŘEJMENOVÁNÍ PARTIČKY (Správce 1x za 24h, SuperAdmin neomezeně)
+window.openRenameGroupModal = (groupId, currentName) => {
+    window.closeGroupModal();
+    const store = Alpine.store('appState');
+    const isSuper = Boolean(store?.isSuperAdmin);
+
+    const modalHtml = `
+        <div style="padding: 10px; width: 100%; box-sizing: border-box; text-align: center;">
+            <p style="color: #9ca3af; font-size: 0.85rem; margin: 0 0 14px 0; line-height: 1.4;">
+                Zadej nový název partičky ${isSuper ? '<span style="color:#fbbf24; font-weight:bold;">(SuperAdmin: bez limitu)</span>' : '<span style="color:#38bdf8;">(Správce: max. 1× za 24h)</span>'}:
+            </p>
+            <input type="text" id="modal-rename-group-input" maxlength="30" value="${window.escapeHTML(currentName || '')}" placeholder="Nový název..." 
+                   style="height: 42px; width: 100%; background: #111827; border: 1.5px solid #38bdf8; border-radius: 8px; color: #ffffff; font-size: 0.95rem; font-weight: bold; text-align: center; margin: 0 0 14px 0; box-sizing: border-box;">
+            <button type="button" class="action-btn" style="background: #059669; color: #ffffff; height: 42px; font-family: 'Oswald', sans-serif; font-size: 0.88rem; font-weight: 700; border-radius: 8px; margin: 0; width: 100%;" 
+                    onclick="window.submitRenameGroupAction('${groupId}')">ULOŽIT NOVÝ NÁZEV</button>
+        </div>
+    `;
+    window.openGlobalUiModal("✏️ PŘEJMENOVAT PARTIČKU", modalHtml);
+};
+
+window.submitRenameGroupAction = async (groupId) => {
+    const input = document.getElementById("modal-rename-group-input");
+    const val = input ? input.value.trim() : "";
+    const store = Alpine.store('appState');
+    const leagueName = store?.selectedLeague || window.superAdminSelectedGroupLeague;
+
+    if (!val || val.length < 3) {
+        window.showToast("Název musí mít alespoň 3 znaky! ⚠️", true);
+        return;
+    }
+
+    window.showToast("⏳ Ukládám nový název partičky...", false);
+    try {
+        const { httpsCallable } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-functions.js");
+        const renameGroupCF = httpsCallable(window.functions, "renameGroupCF");
+        const res = await renameGroupCF({ 
+            groupId: groupId, 
+            leagueName: leagueName, 
+            newNazev: val 
+        });
+
+        document.querySelectorAll(".spy-modal-overlay.dynamic-global-modal").forEach(el => el.remove());
+        window.showToast(res.data?.message || "✅ Název úspěšně změněn!");
+
+        // Okamžité překreslení na displeji
+        if (leagueName && typeof window.nactiMojePartickyProLigu === 'function') {
+            await window.nactiMojePartickyProLigu(leagueName);
+        }
+        if (store?.currentScreen === 'superAdminScreen' && typeof window.renderSuperAdminGroups === 'function') {
+            await window.renderSuperAdminGroups();
+        }
+    } catch(e) {
+        window.showToast("❌ " + (e.message || "Změna názvu se nezdařila"), true);
+    }
+};
+
+window.openJoinGroupModal = () => {
+    window.closeGroupModal();
+    const modalHtml = `
+        <div style="padding: 10px; width: 100%; box-sizing: border-box; text-align: center;">
+            <p style="color: #9ca3af; font-size: 0.85rem; margin: 0 0 14px 0; line-height: 1.4;">
+                Zadej 6místný kód, který jsi dostal od kamaráda nebo zakladatele party:
+            </p>
+            <input type="text" id="modal-join-group-code" maxlength="6" placeholder="KÓD PARTY" 
+                   style="height: 44px; width: 100%; background: #111827; border: 1.5px solid #38bdf8; border-radius: 8px; color: #fbbf24; font-family: monospace; font-size: 1.25rem; font-weight: 800; letter-spacing: 2px; text-align: center; text-transform: uppercase; margin: 0 0 14px 0; box-sizing: border-box;">
+            <button type="button" class="action-btn" style="background: #2563eb; color: #ffffff; height: 42px; font-family: 'Oswald', sans-serif; font-size: 0.88rem; font-weight: 700; border-radius: 8px; margin: 0; width: 100%;" 
+                    onclick="window.submitJoinGroupAction()">PŘIPOJIT SE K PARTIČCE</button>
+        </div>
+    `;
+    window.openGlobalUiModal("🔑 ZADAT KÓD PARTY", modalHtml);
+};
+
+window.submitJoinGroupAction = async () => {
+    const input = document.getElementById("modal-join-group-code");
+    const val = input ? input.value.trim().toUpperCase() : "";
+    if (!val || val.length !== 6) {
+        window.showToast("Zadej platný 6místný kód! ⚠️", true);
+        return;
+    }
+
+    window.showToast("⏳ Připojuji k partě...", false);
+    try {
+        const { httpsCallable } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-functions.js");
+        const joinGroupCF = httpsCallable(window.functions, "joinGroupCF");
+        const res = await joinGroupCF({ kod: val });
+
+        document.querySelectorAll(".spy-modal-overlay").forEach(el => el.remove());
+        window.showToast(res.data?.message || "✅ Vítej v partičce!");
+
+        const store = Alpine.store('appState');
+        if (store?.selectedLeague) {
+            await window.nactiMojePartickyProLigu(store.selectedLeague);
+            await window.selectGroup(val);
+        }
+    } catch(e) {
+        window.showToast("❌ Chyba: " + (e.message || "Skupinu se nepodařilo najít"), true);
+    }
+};
+
+window.openCreateGroupModal = () => {
+    window.closeGroupModal();
+    const store = Alpine.store('appState');
+    const leagueName = store?.selectedLeague || "Tipsport Extraliga";
+
+    const modalHtml = `
+        <div style="padding: 10px; width: 100%; box-sizing: border-box; text-align: center;">
+            <p style="color: #9ca3af; font-size: 0.85rem; margin: 0 0 14px 0; line-height: 1.4;">
+                Zadej název své party pro soutěž <strong style="color: #38bdf8;">${leagueName}</strong>:
+            </p>
+            <input type="text" id="modal-create-group-name" maxlength="30" placeholder="Např. Hospoda U Kocoura" 
+                   style="height: 42px; width: 100%; background: #111827; border: 1.5px solid #10b981; border-radius: 8px; color: #ffffff; font-size: 0.95rem; font-weight: bold; text-align: center; margin: 0 0 14px 0; box-sizing: border-box;">
+            <button type="button" class="action-btn" style="background: #059669; color: #ffffff; height: 42px; font-family: 'Oswald', sans-serif; font-size: 0.88rem; font-weight: 700; border-radius: 8px; margin: 0; width: 100%;" 
+                    onclick="window.submitCreateGroupAction()">VYTVOŘIT A ZÍSKAT KÓD</button>
+        </div>
+    `;
+    window.openGlobalUiModal("➕ ZALOŽIT NOVOU PARTU", modalHtml);
+};
+
+window.submitCreateGroupAction = async () => {
+    const input = document.getElementById("modal-create-group-name");
+    const val = input ? input.value.trim() : "";
+    const store = Alpine.store('appState');
+    const leagueName = store?.selectedLeague;
+
+    if (!val || val.length < 3) {
+        window.showToast("Název musí mít alespoň 3 znaky! ⚠️", true);
+        return;
+    }
+
+    window.showToast("⏳ Zakládám partičku...", false);
+    try {
+        const { httpsCallable } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-functions.js");
+        const createGroupCF = httpsCallable(window.functions, "createGroupCF");
+        const res = await createGroupCF({ leagueName: leagueName, nazev: val });
+
+        document.querySelectorAll(".spy-modal-overlay").forEach(el => el.remove());
+        window.showToast(res.data?.message || "✅ Partička byla založena!");
+
+        if (leagueName) {
+            await window.nactiMojePartickyProLigu(leagueName);
+            if (res.data?.kod) {
+                await window.selectGroup(res.data.kod);
+            }
+        }
+    } catch(e) {
+        window.showToast("❌ Chyba: " + (e.message || "Založení se nezdařilo"), true);
+    }
 };

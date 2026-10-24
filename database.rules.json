@@ -1,5 +1,9 @@
 {
   "rules": {
+    "live_ticks": {
+      ".read": true,
+      ".write": false
+    },
     "status": {
       ".read": true,
       "$uid": {
@@ -8,7 +12,7 @@
     },
     "stats": {
       ".read": true,
-      ".write": "auth != null"
+      ".write": false
     },
     "guest_presence": {
       ".read": true,
@@ -38,8 +42,22 @@
         }
       }
     },
+    "skupiny": {
+      ".read": "auth != null && auth.token.isSuperAdmin === true",
+      ".write": false
+    },
+    "user_groups": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false
+      }
+    },
     "system": {
       "leagues_pulse": {
+        ".read": true,
+        ".write": false
+      },
+      "hof_pulse": {
         ".read": true,
         ".write": false
       }

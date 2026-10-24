@@ -17,7 +17,8 @@ const nactiExcelJS = () => {
 window.exportujTabulkuPoradiExcel = async () => {
     const store = window.Alpine?.store('appState');
     const leagueName = store?.selectedLeague || 'Tipsport Extraliga';
-    const centralDoc = store?.leaderboardData;
+    const isGroup = Boolean(store?.selectedGroupId && store?._groupLeaderboardData);
+    const centralDoc = isGroup ? store._groupLeaderboardData : store?.leaderboardData;
 
     if (!centralDoc || (!centralDoc.zebricek && !centralDoc.zebricekLive)) {
         if (typeof window.showToast === 'function') {
@@ -106,7 +107,8 @@ window.exportujTabulkuPoradiExcel = async () => {
         });
 
         const safeLeague = String(leagueName).replace(/[^a-zA-Z0-9]/g, '_');
-        const fileName = `Poradi_${safeLeague}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        const groupPart = isGroup && centralDoc?.skupina?.nazev ? `_${String(centralDoc.skupina.nazev).replace(/[^a-zA-Z0-9]/g, '_')}` : '';
+        const fileName = `Poradi_${safeLeague}${groupPart}_${new Date().toISOString().split('T')[0]}.xlsx`;
 
         const downloadUrl = URL.createObjectURL(blob);
         const link = document.createElement('a');

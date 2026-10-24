@@ -20,10 +20,11 @@ service cloud.firestore {
       // 🔒 Bezpečné čtení: Hráč vidí svůj profil pro přihlášení, Admin vidí všechny pro soupisku
       allow read: if isLogged() && (request.auth.uid == userId || isAdmin());
       
-      // 🔓 Povolí vytvoření profilu (přidělení admin práv i kompetencí blokováno)
+      // 🔓 Povolí vytvoření profilu (přidělení admin práv i kompetencí blokováno, bot vyhrazen pro server)
       allow create: if isLogged() && (
         isSuperAdmin() || (
           request.auth.uid == userId && 
+          userId != 'bot_tipnito' &&
           request.resource.data.get('isAdmin', false) == false && 
           request.resource.data.get('isSuperAdmin', false) == false &&
           request.resource.data.get('adminLeagues', []).size() == 0
@@ -35,6 +36,7 @@ service cloud.firestore {
         isSuperAdmin() ||
         (
           request.auth.uid == userId && 
+          userId != 'bot_tipnito' &&
           request.resource.data.get('isAdmin', false) == false && 
           request.resource.data.get('isSuperAdmin', false) == false &&
           

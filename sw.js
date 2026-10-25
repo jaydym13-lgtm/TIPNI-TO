@@ -4,7 +4,7 @@
 // =========================================================================
 
 // 🏷️ JEDINÉ CENTRÁLNÍ MÍSTO PRAVDY PRO VERZI APLIKACE
-const APP_VERSION = 'v2.0.1';
+const APP_VERSION = 'v2.0.2';
 const CACHE_NAME = `tipnito-core-${APP_VERSION}`;
 
 // Statické a neměnné assety (Písma, ikony, externí knihovny z CDN)
@@ -216,9 +216,10 @@ self.addEventListener('push', (event) => {
         body: body,
         icon: '/img/favicon192.png',
         badge: '/img/favicon192.png',
-        vibrate: [300, 150, 300],
+        vibrate: [200, 100, 200, 100, 200],
         tag: tag,
         renotify: true,
+        requireInteraction: true,
         silent: false,
         data: { url: targetUrl }
     };

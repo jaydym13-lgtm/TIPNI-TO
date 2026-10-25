@@ -9,7 +9,7 @@ import { getFunctions } from "https://www.gstatic.com/firebasejs/11.0.0/firebase
 import { CONFIG } from "./config.js";
 import { getActiveChangelog, formatChangelogDate } from "./changelog.js";
 
-import { getDatabase, ref as rtdbRef, onValue as onRtdbValue, update as rtdbUpdate } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
+import { getDatabase, ref as rtdbRef, onValue as onRtdbValue, update as rtdbUpdate, goOnline, goOffline } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
 
 // 🔇 UMLČENÍ VAROVÁNÍ SDK: Potlačí interní BloomFilter a cache warningy z konzole
 setLogLevel('error');
@@ -2248,6 +2248,12 @@ document.addEventListener("visibilitychange", async () => {
     // ⚡ 2. MOBIL VYTAŽEN Z KAPSY (BLESKOVÉ PROBUZENÍ)
     else {
         try { await enableNetwork(db); } catch (e) {}
+        try { if (rtdb) goOnline(rtdb); } catch (e) {}
+
+        // 🍏 iOS WebKit WAKEUP PULSE: Okamžitá obnova tokenu a přítomnosti
+        if (window.auth?.currentUser) {
+            window.auth.currentUser.getIdToken(true).catch(() => {});
+        }
 
         if (!window.liveRadarIntervalGlobal) {
             window.liveRadarIntervalGlobal = setInterval(window.zkontrolujLiveRadarGlobalne, 25000);

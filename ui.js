@@ -82,11 +82,32 @@ export const showSplash = (text = "Načítání...") => {
     }
 };
 
+// 🤖 CENTRÁLNÍ FORMÁTOVAČ JMÉNA HRÁČE & DETEKCE BOTA
+export const formatPlayerNick = (player, fallback = 'Hráč', withBadge = true) => {
+    if (!player) return fallback;
+    const nick = (typeof player === 'string') ? player : (player.nick || player.nickname || fallback);
+    if (nick === 'Čeká') return 'Čeká';
+
+    const isBot = Boolean(
+        (typeof player === 'object' && (player.isBot || player.uid?.startsWith('bot_'))) ||
+        nick === 'TipniTo' ||
+        nick.toLowerCase() === 'tipnito'
+    );
+
+    const safeNick = escapeHTML(nick);
+    if (!isBot) return safeNick;
+
+    return withBadge
+        ? `🤖 ${safeNick} <span style="color: #9ca3af; font-size: 0.8rem; font-weight: normal; margin-left: 2px;">(bot)</span>`
+        : `🤖 ${safeNick}`;
+};
+
 // 🧠 BACKWARD BINDING COMPATIBILITY WRAPPER: Ponecháme vazby na window objektu, aby zbytek aplikace před plným přeimportováním nespadl
 window.showToast = showToast;
 window.inicializujDarkMode = inicializujDarkMode;
 window.openGlobalUiModal = openGlobalUiModal;
 window.escapeHTML = escapeHTML;
+window.formatPlayerNick = formatPlayerNick;
 window.setSplashText = setSplashText;
 window.hideSplash = hideSplash;
 window.showSplash = showSplash;

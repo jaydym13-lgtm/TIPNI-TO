@@ -116,10 +116,13 @@ window.renderMatches = (leagueName) => {
 window.globalniTipoveCooldowny = window.globalniTipoveCooldowny || {};
 // UKLÁDÁNÍ JEDNOHO TIPU UŽIVATELE (S 15VTEŘINOVÝM ANTI-SPAM ZÁMKEM)
 window.saveTip = async (matchId, leagueName, event) => {
-    const user = window.auth.currentUser;
-    if (!user) return;
+    const user = window.auth?.currentUser;
+    if (!user) {
+        window.showToast("⚠️ Obnovuji spojení se serverem, zkus to za chvilku znovu...", true);
+        return;
+    }
 
-if (!navigator.onLine) {
+    if (!navigator.onLine) {
         window.showToast("⚠️ Jsi offline! Pro uložení tipu se připoj k internetu.", true);
         return;
     }
@@ -192,8 +195,9 @@ if (!navigator.onLine) {
     try {
         const ligaKlic = leagueName.replace(/ /g, '_');
         
-        // 🔥 SERVEROVÝ POHON JEDNOHO TIPU PŘES CENTRÁLNÍ CLOUD FUNKCI:
-        const saveUserTipsCF = httpsCallable(window.functions, 'saveUserTipsCF');
+        // 🔥 SERVEROVÝ POHON S 15S TIMEOUTEM PROTI ZAMRZNUTÍ NA iOS
+        try { await user.getIdToken(); } catch (e) {}
+        const saveUserTipsCF = httpsCallable(window.functions, 'saveUserTipsCF', { timeout: 15000 });
 
         const jednaTipMapa = {
             [matchId]: {
@@ -1138,8 +1142,11 @@ window.selectPlayoffUser = (matchId, choice) => {
 
 // 🪐 A) PRO HRÁČE: HROMADNÉ UKLÁDÁNÍ TIPŮ DO SEZÓNNÍHO MONOLITU REAKTIVNĚ
 window.saveAllUserTips = async (leagueName, event, isSilent = false) => {
-    const user = window.auth.currentUser;
-    if (!user) return;
+    const user = window.auth?.currentUser;
+    if (!user) {
+        if (!isSilent) window.showToast("⚠️ Obnovuji spojení se serverem, zkus to za chvilku znovu...", true);
+        return;
+    }
 
     if (!navigator.onLine) {
         if (!isSilent) window.showToast("⚠️ Jsi offline! Pro hromadné uložení tipů se připoj k internetu.", true);
@@ -1220,7 +1227,8 @@ window.saveAllUserTips = async (leagueName, event, isSilent = false) => {
     }
 
     try {
-        const saveUserTipsCF = httpsCallable(window.functions, 'saveUserTipsCF');
+        try { await user.getIdToken(); } catch (e) {}
+        const saveUserTipsCF = httpsCallable(window.functions, 'saveUserTipsCF', { timeout: 20000 });
 
         const cistaMapaTipuProServer = {};
         Object.keys(updateObj.souteze[ligaKlic].tipy).forEach(mId => {

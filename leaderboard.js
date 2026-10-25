@@ -549,10 +549,7 @@ window.vykresliDataZebříčku = (centralDoc, contentArea, tab, leagueName) => {
         row.setAttribute('data-uid', stats.uid);
         const melByBytOtevreny = uidsKObnoveni.includes(stats.uid);
 
-        const isBot = Boolean(stats.isBot);
-        const nickDisplayHtml = isBot
-            ? `🤖 ${window.escapeHTML(stats.nickname)} <span style="color: #9ca3af; font-size: 0.8rem; font-weight: normal; margin-left: 2px;">(bot)</span>`
-            : window.escapeHTML(stats.nickname);
+        const nickDisplayHtml = window.formatPlayerNick ? window.formatPlayerNick(stats) : window.escapeHTML(stats.nickname);
 
         row.innerHTML = `
             <div onclick="const det = this.nextElementSibling; const arr = this.querySelector('.leaderboard-arrow-icon'); if(det.style.display==='none' || det.style.display===''){det.style.display='block'; arr.innerText='▲';}else{det.style.display='none'; arr.innerText='▼';}" class="leaderboard-row-trigger">
@@ -2568,8 +2565,7 @@ window.renderHallOfFame = (leagueFilter = 'ALL') => {
         }
 
         const metaSub = isAll ? `${p.archetypeName} •${p.bestLeague}` : `${p.archetypeName} •${p.points} b.`;
-        const isBot = Boolean(p.isBot);
-        const hofNickDisplay = isBot ? `🤖 ${window.escapeHTML(p.nickname)}` : window.escapeHTML(p.nickname);
+        const hofNickDisplay = window.formatPlayerNick ? window.formatPlayerNick(p, 'Hráč', false) : window.escapeHTML(p.nickname);
 
         rowsHtml += `
             <div class="hof-player-row ${isMe ? 'is-current-user' : ''}" onclick="window.openPlayerProfile('${p.uid}', '${isAll ? 'ALL' : leagueFilter}')">

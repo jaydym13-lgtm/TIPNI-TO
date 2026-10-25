@@ -353,10 +353,6 @@ const preMatchExecutionTask = onRequest({
 
       const resp = await messaging.sendEachForMulticast({
         tokens: tokens,
-        notification: {
-          title: title,
-          body: body
-        },
         data: {
           title: title,
           body: body,
@@ -375,9 +371,11 @@ const preMatchExecutionTask = onRequest({
             body: body,
             icon: `${APP_BASE_URL}/img/favicon192.png`,
             badge: `${APP_BASE_URL}/img/favicon192.png`,
-            vibrate: [300, 150, 300],
+            vibrate: [200, 100, 200, 100, 200],
             tag: `untipped-match-alert-${windowMinutes}`,
             renotify: true,
+            requireInteraction: true,
+            silent: false,
             data: { url: targetUrl }
           }
         }

@@ -27,6 +27,11 @@ window.scrollToMyCupPosition = () => {
     }
 };
 
+// 🤖 FORMÁTOVAČ JMÉNA HRÁČE (CENTRÁLNÍ DELEGACE NA UI.JS)
+const formatCupPlayerNick = (player, fallback = 'Hráč') => {
+    return window.formatPlayerNick ? window.formatPlayerNick(player, fallback) : (player?.nick || player?.nickname || fallback);
+};
+
 // 🎨 HLAVNÍ RENDERER POHÁRU (POHÁROVÁ ARÉNA & K.O. PAVOUK)
 window.renderCupScreen = async (overrideLeague) => {
     const container = document.getElementById('cupScreenContent');
@@ -174,7 +179,7 @@ window.renderCupScreen = async (overrideLeague) => {
                     <div class="cup-duel-row ${p1Wins ? 'is-winner' : ''}">
                         <div class="cup-duel-player">
                             <span style="color: #64748b; font-size: 0.75rem;">#${duel.p1?.seed || '-'}</span>
-                            <strong>${window.escapeHTML(duel.p1?.nick || 'Čeká')}</strong>
+                            <strong>${formatCupPlayerNick(duel.p1, 'Čeká')}</strong>
                             ${p1Wins ? ' 👑' : ''}
                         </div>
                         <div class="cup-duel-scores">
@@ -186,7 +191,7 @@ window.renderCupScreen = async (overrideLeague) => {
                     <div class="cup-duel-row ${p2Wins ? 'is-winner' : ''}">
                         <div class="cup-duel-player">
                             <span style="color: #64748b; font-size: 0.75rem;">#${duel.p2?.seed || '-'}</span>
-                            <strong>${window.escapeHTML(duel.p2?.nick || 'Čeká')}</strong>
+                            <strong>${formatCupPlayerNick(duel.p2, 'Čeká')}</strong>
                             ${p2Wins ? ' 👑' : ''}
                         </div>
                         <div class="cup-duel-scores">
@@ -266,7 +271,7 @@ window.renderCupScreen = async (overrideLeague) => {
             <div class="cup-arena-row ${badgeClass} ${isMe ? 'is-me' : ''}" data-uid="${p.uid}">
                 <div class="cup-arena-left">
                     <span class="cup-arena-rank">${rank}.</span>
-                    <span class="cup-arena-nick">${window.escapeHTML(p.nick || 'Hráč')}</span>
+                    <span class="cup-arena-nick">${formatCupPlayerNick(p)}</span>
                 </div>
                 <div class="cup-arena-right">
                     <span class="cup-arena-badge ${badgeClass}">${badgeText}</span>

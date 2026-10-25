@@ -1143,8 +1143,9 @@ window.vykresliRekordyAStatistiky = (centralDoc, contentArea, tab, leagueName) =
 
 window.showPlayerOpenRoundsModal = (playerUid) => {
     const store = Alpine.store('appState');
-    const leaderboardData = store?.leaderboardData;
-    const zebricek = leaderboardData?.zebricek || leaderboardData?.zebricekLive || [];
+    const isGroup = Boolean(store?.selectedGroupId && store?._groupLeaderboardData);
+    const centralDoc = isGroup ? store._groupLeaderboardData : store?.leaderboardData;
+    const zebricek = centralDoc?.zebricek || centralDoc?.zebricekLive || [];
     const player = zebricek.find(p => p.uid === playerUid);
     if (!player) return;
 
@@ -1736,7 +1737,10 @@ window.showPlayerTipsModal = async (playerUid, leagueName) => {
 
     if (!rozpisData || !rozpisData.zapasyMapa) return;
 
-    const hracSlozka = store.leaderboardData?.zebricek?.find(p => p.uid === playerUid) || store.leaderboardData?.zebricekLive?.find(p => p.uid === playerUid);
+    const isGroup = Boolean(store?.selectedGroupId && store?._groupLeaderboardData);
+    const centralDoc = isGroup ? store._groupLeaderboardData : store?.leaderboardData;
+
+    const hracSlozka = centralDoc?.zebricek?.find(p => p.uid === playerUid) || centralDoc?.zebricekLive?.find(p => p.uid === playerUid);
     const nickname = hracSlozka ? hracSlozka.nickname : (isMe ? (store.nickname || 'Já') : 'Hráč');
 
     let hracovyTipyData;
@@ -1938,7 +1942,8 @@ window.renderPlayerTipsModalContent = () => {
 
     const storeObj = Alpine.store('appState');
     const myNickName = storeObj?.nickname || '';
-    const centralDoc = storeObj?.leaderboardData;
+    const isGroup = Boolean(storeObj?.selectedGroupId && storeObj?._groupLeaderboardData);
+    const centralDoc = isGroup ? storeObj._groupLeaderboardData : storeObj?.leaderboardData;
     const kolaSouhrn = centralDoc?.kolaSouhrn || {};
     const souhrnKola = kolaSouhrn[currentRoundName] || null;
 
@@ -2258,15 +2263,37 @@ window.showSpyModal = async (matchId, matchTitle) => {
     const zapasyMapa = rozpisData.zapasyMapa || {};
     const matchData = zapasyMapa[matchId] || {};
     
-    const leaderboardData = Alpine.store('appState').leaderboardData || {};
-    const zebricek = leaderboardData.zebricek || [];
-    
+    // 🛡️ REZOLUCE KONTEXTU (SOUKROMÁ SKUPINA VS. GLOBÁLNÍ LIGA)
+    const activeGroupId = store?.selectedGroupId;
+    let groupData = store?._groupLeaderboardData;
+
+    if (activeGroupId && (!groupData || groupData.id !== activeGroupId)) {
+        if (store?.groupDataCache?.[activeGroupId]) {
+            groupData = store.groupDataCache[activeGroupId];
+            store._groupLeaderboardData = groupData;
+        } else {
+            try {
+                const sezonaId = store?.activeSeason || window.SEZONA_ID || CONFIG.DEFAULT_SEASON;
+                const ligaKlic = String(leagueName || '').replace(/ /g, "_");
+                const resGrp = await fetch(`${CONFIG.R2_BASE_URL}/sezony/${sezonaId}/${ligaKlic}/skupiny/${activeGroupId}.json`);
+                if (resGrp.ok) {
+                    groupData = await resGrp.json();
+                    store.groupDataCache = store.groupDataCache || {};
+                    store.groupDataCache[activeGroupId] = groupData;
+                    store._groupLeaderboardData = groupData;
+                }
+            } catch (e) {}
+        }
+    }
+
+    const isGroup = Boolean(activeGroupId && groupData);
+    const centralDoc = isGroup ? groupData : (store?.leaderboardData || {});
+    const zebricek = centralDoc.zebricek || [];
+    const groupName = isGroup ? (centralDoc?.skupina?.nazev || 'Partička') : null;
+
     const mapaPrezdivek = {};
     zebricek.forEach(p => {
         if (p.email) mapaPrezdivek[p.email.trim().toLowerCase()] = p.nickname;
-    });
-
-    zebricek.forEach(p => {
         if (p.uid) mapaPrezdivek[p.uid] = p.nickname;
     });
 
@@ -2274,7 +2301,7 @@ window.showSpyModal = async (matchId, matchTitle) => {
     let isEvaluated = (matchData.vysledek_domaci !== undefined && matchData.vysledek_hoste !== undefined && matchData.apiStatus !== "IN_PLAY" && matchData.apiStatus !== "PAUSED");
     const tipyProZapas = spyData.tipy || [];
 
-    if (vsichniHraciUids.length === 0 && tipyProZapas.length > 0) {
+    if (vsichniHraciUids.length === 0 && tipyProZapas.length > 0 && !isGroup) {
         vsichniHraciUids = tipyProZapas.map(tip => tip.uid || tip.userEmail).filter(Boolean);
     }
 
@@ -2283,6 +2310,42 @@ window.showSpyModal = async (matchId, matchTitle) => {
         const nB = mapaPrezdivek[b] || 'Hráč';
         return nA.localeCompare(nB, 'cs');
     });
+
+    // 🎯 FILTR TIPŮ PRO PROCENTA: Ve skupině počítáme výhradně ze členů party!
+    const groupUidsSet = new Set(vsichniHraciUids);
+    const aktualniTipyNaVypocet = isGroup
+        ? tipyProZapas.filter(t => groupUidsSet.has(t.uid) || groupUidsSet.has(t.userId))
+        : tipyProZapas;
+
+    let dWins = 0, rems = 0, hWins = 0;
+    aktualniTipyNaVypocet.forEach(t => {
+        if (t.tip_domaci !== undefined && t.tip_hoste !== undefined && t.tip_domaci !== null && t.tip_hoste !== null && t.tip_domaci !== '' && t.tip_hoste !== '') {
+            const td = parseInt(t.tip_domaci);
+            const th = parseInt(t.tip_hoste);
+            if (!isNaN(td) && !isNaN(th)) {
+                if (td > th) dWins++;
+                else if (td === th) rems++;
+                else hWins++;
+            }
+        }
+    });
+
+    let celkemZadanychTipu = dWins + rems + hWins;
+    let pDom = 0, pRem = 0, pHos = 0;
+
+    if (celkemZadanychTipu > 0) {
+        pDom = Math.round((dWins / celkemZadanychTipu) * 100);
+        pRem = Math.round((rems / celkemZadanychTipu) * 100);
+        pHos = Math.round((hWins / celkemZadanychTipu) * 100);
+
+        let soucetProcent = pDom + pRem + pHos;
+        if (soucetProcent !== 100) {
+            let rozdilProcent = 100 - soucetProcent;
+            if (dWins >= rems && dWins >= hWins) pDom += rozdilProcent;
+            else if (rems >= dWins && rems >= hWins) pRem += rozdilProcent;
+            else pHos += rozdilProcent;
+        }
+    }
 
     let nenatipovaloPocet = 0;
     let rowsHtml = '';
@@ -2336,12 +2399,13 @@ window.showSpyModal = async (matchId, matchTitle) => {
             ? `<div class="match-spy-pts-badge ${badgeInfo.badgeClass}">${badgeInfo.ptsBadgeStr}</div>`
             : `<div class="match-spy-pts-badge badge-pts-zero">⏳ –</div>`;
 
-        const isBot = Boolean(pObj?.isBot);
-        const spyNickDisplay = isBot ? `🤖 ${hracNick}` : hracNick;
+        const nickHtml = window.formatPlayerNick
+            ? window.formatPlayerNick(pObj || { uid, nickname: hracNick, isBot: Boolean(pObj?.isBot) }, 'Hráč', false)
+            : (Boolean(pObj?.isBot) ? `🤖 ${window.escapeHTML(hracNick)}` : window.escapeHTML(hracNick));
 
         rowsHtml += `
             <div class="match-spy-card ${zebraClass} ${meClass}">
-                <span class="match-spy-nick">${window.escapeHTML(spyNickDisplay)}</span>
+                <span class="match-spy-nick">${nickHtml}</span>
                 <div class="match-spy-boxes">
                     <div class="match-spy-tip-box ${hasTip ? '' : 'no-tip'}">${tipStr}</div>
                     ${ptsBadgeHtml}
@@ -2362,46 +2426,15 @@ window.showSpyModal = async (matchId, matchTitle) => {
         scorePillHtml = `<div class="match-spy-score-pill is-live"><span class="match-spy-live-dot"></span>LIVE ${prubD}:${prubH}</div>`;
     }
 
-    let dWins = 0, rems = 0, hWins = 0;
-    const aktualniTipyNaVypocet = spyData.tipy || [];
-    
-    aktualniTipyNaVypocet.forEach(t => {
-        if (t.tip_domaci !== undefined && t.tip_hoste !== undefined && t.tip_domaci !== null && t.tip_hoste !== null && t.tip_domaci !== '' && t.tip_hoste !== '') {
-            const td = parseInt(t.tip_domaci);
-            const th = parseInt(t.tip_hoste);
-            if (!isNaN(td) && !isNaN(th)) {
-                if (td > th) dWins++;
-                else if (td === th) rems++;
-                else hWins++;
-            }
-        }
-    });
-    
-    let celkemZadanychTipu = dWins + rems + hWins;
-    let pDom = 0, pRem = 0, pHos = 0;
-    
-    if (celkemZadanychTipu > 0) {
-        pDom = Math.round((dWins / celkemZadanychTipu) * 100);
-        pRem = Math.round((rems / celkemZadanychTipu) * 100);
-        pHos = Math.round((hWins / celkemZadanychTipu) * 100);
-        
-        let soucetProcent = pDom + pRem + pHos;
-        if (soucetProcent !== 100) {
-            let rozdilProcent = 100 - soucetProcent;
-            if (dWins >= rems && dWins >= hWins) pDom += rozdilProcent;
-            else if (rems >= dWins && rems >= hWins) pRem += rozdilProcent;
-            else pHos += rozdilProcent;
-        }
-    }
-    
     const topIconHtml = matchData.isTopMatch ? '🔥 ' : '';
+    const groupBadgeLabel = isGroup ? `👥 ${window.escapeHTML(groupName)}` : `📊 Celá liga`;
 
     const modalTitle = `
         <div class="match-spy-header-container" style="padding-bottom: 2px;">
             <div class="match-spy-teams-title">${topIconHtml}${matchTitle}</div>
             ${scorePillHtml}
             <div style="text-align: center; color: #9ca3af; font-size: 0.74rem; background: #1f2937; border: 1px solid #374151; padding: 3px 10px; border-radius: 6px; margin: 4px auto 2px auto; font-weight: bold; width: fit-content; letter-spacing: 0.3px;">
-                📊 Skupina: <span style="color:#fff;">${pDom}%</span> – <span style="color:#fff;">${pRem}%</span> – <span style="color:#fff;">${pHos}%</span>
+                ${groupBadgeLabel}: <span style="color:#fff;">${pDom}%</span> – <span style="color:#fff;">${pRem}%</span> – <span style="color:#fff;">${pHos}%</span>
             </div>
             <div style="text-align: center; color: ${nenatipovaloPocet > 0 ? '#f87171' : '#34d399'}; font-size: 0.70rem; font-weight: bold; font-family: monospace; text-transform: uppercase; margin-top: 2px;">
                 ${nenatipovaloPocet > 0 ? `⚠️ NENATIPOVALO ${nenatipovaloPocet} HRÁČŮ` : '✅ VŠICHNI HRÁČI NATIPOVALI'}

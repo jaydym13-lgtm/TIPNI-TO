@@ -12,6 +12,11 @@ const saveUserTipsCF = onCall({ cors: true }, async (request) => {
     throw new HttpsError("unauthenticated", "Pro uložení tipů musíš být přihlášen!");
   }
 
+  // ☕ TICHÝ PŘEDEHŘEV CLOUD RUN KONTEJNERU (0 ms odezva, obchází rate-limit)
+  if (request.data?.warmup === true) {
+    return { warmed: true };
+  }
+
   const uid = request.auth.uid;
 
   // ⏱️ OCHRANA PROTI SPAMU & DENIAL OF WALLET (Rate-limit 3 sekundy přes RTDB)

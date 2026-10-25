@@ -225,7 +225,7 @@ window.shareReportFromModal = async (leagueName) => {
 };
 
 // =========================================================================
-// 🏆 ČISTÉ VYKRESLENÍ TABULKY HRÁČŮ
+// 🏆 ČISTÉ VYKRESLENÍ TABULKY HRÁČŮ (ZERO-FLICKER CACHE ENGINE)
 // =========================================================================
 window.renderLeaderboard = async (resetExpanded = false) => {
     const store = Alpine.store('appState');
@@ -278,77 +278,115 @@ window.renderLeaderboard = async (resetExpanded = false) => {
         }
     }
 
-    const subBtnTableStyle = subTab === 'table' ? 'is-active' : '';
-    const subBtnStatsStyle = subTab === 'stats' ? 'is-active' : '';
-    const subBtnRadarStyle = subTab === 'radar' ? 'is-active' : '';
+    // ⚡ 1. KROK: PŘÍPRAVA DAT PŘED JAKÝMKOLIV ZÁSAHEM DO STRÁNKY (ŽÁDNÉ MAZÁNÍ OBRAZOVKY)
+    let leaderboardData = store?.leaderboardData;
+    const activeGroupId = store?.selectedGroupId;
+    const sezonaId = store?.activeSeason || window.SEZONA_ID || "2026_2027";
+    const ligaKlic = String(leagueName).replace(/ /g, "_");
+
+    store.groupDataCache = store.groupDataCache || {};
+
+    if (activeGroupId) {
+        // Okamžitá paměťová kontrola (0 ms)
+        if (store.groupDataCache[activeGroupId]) {
+            store._groupLeaderboardData = store.groupDataCache[activeGroupId];
+        } else if (!store._groupLeaderboardData || store._groupLeaderboardData.id !== activeGroupId) {
+            try {
+                const resGrp = await fetch(`${CONFIG.R2_BASE_URL}/sezony/${sezonaId}/${ligaKlic}/skupiny/${activeGroupId}.json`);
+                if (resGrp.ok) {
+                    const grpJson = await resGrp.json();
+                    store.groupDataCache[activeGroupId] = grpJson;
+                    store._groupLeaderboardData = grpJson;
+                }
+            } catch (e) {
+                console.warn("Nepodařilo se načíst soubor skupiny z R2:", e);
+            }
+        }
+
+        if (store._groupLeaderboardData) {
+            const grpJson = store._groupLeaderboardData;
+            leaderboardData = {
+                ...(leaderboardData || {}),
+                ...grpJson,
+                zebricek: grpJson.zebricek || [],
+                zebricekLive: grpJson.zebricekLive || [],
+                isLive: grpJson.isLive || false,
+                aktualizovano: grpJson.aktualizovano || leaderboardData?.aktualizovano
+            };
+        }
+    } else {
+        store._groupLeaderboardData = null;
+    }
 
     const screenHeaderTitle = document.querySelector('#leaderboardScreen h2');
     if (screenHeaderTitle) {
         screenHeaderTitle.innerText = tab === 'live' ? '🔴 LIVE POŘADÍ' : '🏆 POŘADÍ';
     }
 
-    container.innerHTML = `
-        <div class="leaderboard-tabs-wrapper">
-            <button class="nav-btn-leaderboard ${tab === 'total' ? 'is-active is-total' : ''}" onclick="window.leaderboardActiveTab='total'; window.leaderboardActiveSubTab='table'; window.renderLeaderboard(true);">
-                🏆 Pořadí
-            </button>
-            <button class="nav-btn-leaderboard class-live-btn-tab ${tab === 'live' ? 'is-active is-live' : ''}" style="display: ${isLiveAvailable ? 'flex' : 'none'};" onclick="window.leaderboardActiveTab='live'; window.leaderboardActiveSubTab='table'; window.renderLeaderboard(true);">
-                🔴 LIVE Pořadí
-            </button>
-        </div>
-        <div class="leaderboard-subtabs-wrapper ${tab === 'live' ? 'is-live-subtabs' : ''}">
-            <button class="nav-subbtn-leaderboard ${subBtnTableStyle}" onclick="window.leaderboardActiveSubTab='table'; window.renderLeaderboard(false);">
-                📋 Tabulka
-            </button>
-            <button class="nav-subbtn-leaderboard ${subBtnStatsStyle}" onclick="window.leaderboardActiveSubTab='stats'; window.renderLeaderboard(false);">
-                📊 Statistiky
-            </button>
-            ${tab !== 'live' ? `
-            <button class="nav-subbtn-leaderboard ${subBtnRadarStyle}" onclick="window.leaderboardActiveSubTab='radar'; window.renderLeaderboard(false);">
-                👀 Zajímavosti
-            </button>` : ''}
-        </div>
-        <div class="leaderboard-content-area ${tab === 'live' ? 'is-live-mode' : ''}"></div>
-        <button id="myRankFab" class="my-rank-fab ${tab === 'live' ? 'is-live' : ''}" style="display: none;" onclick="window.scrollToMyRank()"></button>
-    `;
+    // ⚡ 2. KROK: ZACHOVÁNÍ EXISTUJÍCÍHO DOMU (PŘEPNUTÍ ZÁLOŽEK BEZ PROBLIKNUTÍ)
+    let contentArea = container.querySelector('.leaderboard-content-area');
+    const existingTabs = container.querySelector('.leaderboard-tabs-wrapper');
+    const existingSubtabs = container.querySelector('.leaderboard-subtabs-wrapper');
+    const isNewLeague = (container.dataset.renderedLeague !== leagueName);
 
-    const contentArea = container.querySelector('.leaderboard-content-area');
-    let leaderboardData = store?.leaderboardData;
-    const activeGroupId = store?.selectedGroupId;
-    const sezonaId = store?.activeSeason || window.SEZONA_ID || "2026_2027";
-    const ligaKlic = String(leagueName).replace(/ /g, "_");
-
-    // 👥 PŘEPNUTÍ NA STATICKÝ SOUBOR PARTIČKY Z R2 (0 READS)
-    if (activeGroupId) {
-        try {
-            const keshRazitko = Date.now();
-            const resGrp = await fetch(`${CONFIG.R2_BASE_URL}/sezony/${sezonaId}/${ligaKlic}/skupiny/${activeGroupId}.json?v=${keshRazitko}`);
-            if (resGrp.ok) {
-                const grpJson = await resGrp.json();
-                store._groupLeaderboardData = grpJson;
-                leaderboardData = {
-                    ...(leaderboardData || {}),
-                    ...grpJson,
-                    zebricek: grpJson.zebricek || [],
-                    zebricekLive: grpJson.zebricekLive || [],
-                    isLive: grpJson.isLive || false,
-                    aktualizovano: grpJson.aktualizovano || leaderboardData?.aktualizovano
-                };
-            }
-        } catch (e) {
-            console.warn("Nepodařilo se načíst soubor skupiny z R2:", e);
-        }
+    if (!contentArea || !existingTabs || !existingSubtabs || isNewLeague) {
+        container.dataset.renderedLeague = leagueName;
+        container.innerHTML = `
+            <div class="leaderboard-tabs-wrapper">
+                <button class="nav-btn-leaderboard btn-tab-total ${tab === 'total' ? 'is-active is-total' : ''}" onclick="window.leaderboardActiveTab='total'; window.leaderboardActiveSubTab='table'; window.renderLeaderboard(true);">
+                    🏆 Pořadí
+                </button>
+                <button class="nav-btn-leaderboard class-live-btn-tab btn-tab-live ${tab === 'live' ? 'is-active is-live' : ''}" style="display: ${isLiveAvailable ? 'flex' : 'none'};" onclick="window.leaderboardActiveTab='live'; window.leaderboardActiveSubTab='table'; window.renderLeaderboard(true);">
+                    🔴 LIVE Pořadí
+                </button>
+            </div>
+            <div class="leaderboard-subtabs-wrapper ${tab === 'live' ? 'is-live-subtabs' : ''}">
+                <button class="nav-subbtn-leaderboard subbtn-table ${subTab === 'table' ? 'is-active' : ''}" onclick="window.leaderboardActiveSubTab='table'; window.renderLeaderboard(false);">
+                    📋 Tabulka
+                </button>
+                <button class="nav-subbtn-leaderboard subbtn-stats ${subTab === 'stats' ? 'is-active' : ''}" onclick="window.leaderboardActiveSubTab='stats'; window.renderLeaderboard(false);">
+                    📊 Statistiky
+                </button>
+                <button class="nav-subbtn-leaderboard subbtn-radar ${subTab === 'radar' ? 'is-active' : ''}" style="display: ${tab !== 'live' ? 'flex' : 'none'};" onclick="window.leaderboardActiveSubTab='radar'; window.renderLeaderboard(false);">
+                    👀 Zajímavosti
+                </button>
+            </div>
+            <div class="leaderboard-content-area ${tab === 'live' ? 'is-live-mode' : ''}"></div>
+            <button id="myRankFab" class="my-rank-fab ${tab === 'live' ? 'is-live' : ''}" style="display: none;" onclick="window.scrollToMyRank()"></button>
+        `;
+        contentArea = container.querySelector('.leaderboard-content-area');
     } else {
-        store._groupLeaderboardData = null;
+        // Pouhá aktualizace aktivních tříd tlačítek bez bourání kostry stránky
+        const totalBtn = existingTabs.querySelector('.btn-tab-total');
+        const liveBtn = existingTabs.querySelector('.btn-tab-live');
+        if (totalBtn) totalBtn.className = `nav-btn-leaderboard btn-tab-total ${tab === 'total' ? 'is-active is-total' : ''}`;
+        if (liveBtn) {
+            liveBtn.className = `nav-btn-leaderboard class-live-btn-tab btn-tab-live ${tab === 'live' ? 'is-active is-live' : ''}`;
+            liveBtn.style.display = isLiveAvailable ? 'flex' : 'none';
+        }
+
+        existingSubtabs.className = `leaderboard-subtabs-wrapper ${tab === 'live' ? 'is-live-subtabs' : ''}`;
+        const tableBtn = existingSubtabs.querySelector('.subbtn-table');
+        const statsBtn = existingSubtabs.querySelector('.subbtn-stats');
+        const radarBtn = existingSubtabs.querySelector('.subbtn-radar');
+        if (tableBtn) tableBtn.className = `nav-subbtn-leaderboard subbtn-table ${subTab === 'table' ? 'is-active' : ''}`;
+        if (statsBtn) statsBtn.className = `nav-subbtn-leaderboard subbtn-stats ${subTab === 'stats' ? 'is-active' : ''}`;
+        if (radarBtn) {
+            radarBtn.className = `nav-subbtn-leaderboard subbtn-radar ${subTab === 'radar' ? 'is-active' : ''}`;
+            radarBtn.style.display = tab !== 'live' ? 'flex' : 'none';
+        }
+
+        contentArea.className = `leaderboard-content-area ${tab === 'live' ? 'is-live-mode' : ''}`;
+        const fab = document.getElementById('myRankFab');
+        if (fab) fab.className = `my-rank-fab ${tab === 'live' ? 'is-live' : ''}`;
     }
 
     if (!leaderboardData) {
         contentArea.innerHTML = `<div class="db-empty-msg" style="color:#fbbf24;">Žebříček se na pozadí připravuje... ⚙️</div>`;
-        const liveBtn = document.querySelector('.class-live-btn-tab');
-        if (liveBtn) liveBtn.style.display = 'none';
         return;
     }
 
+    // ⚡ 3. KROK: OKAMŽITÉ VYPLNĚNÍ VYBRANÉHO POHLEDU ZA 0 MS
     if (subTab === 'stats') {
         window.vykresliRekordyAStatistiky(leaderboardData, contentArea, tab, leagueName);
     } else if (subTab === 'radar') {
@@ -2305,7 +2343,7 @@ window.showSpyModal = async (matchId, matchTitle) => {
         const spyNickDisplay = isBot ? `🤖 ${hracNick}` : hracNick;
 
         rowsHtml += `
-            <div class="match-spy-card ${zebraClass}${meClass}">
+            <div class="match-spy-card ${zebraClass} ${meClass}">
                 <span class="match-spy-nick">${window.escapeHTML(spyNickDisplay)}</span>
                 <div class="match-spy-boxes">
                     <div class="match-spy-tip-box ${hasTip ? '' : 'no-tip'}">${tipStr}</div>

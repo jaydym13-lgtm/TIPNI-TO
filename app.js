@@ -83,23 +83,12 @@ const vstrikniStoresDoPameti = () => {
             return grp ? grp.nazev : 'Moje partička';
         },
 
-        get currentGroupRankText() {
-            if (!this.selectedGroupId) return '';
-            const grpData = this._groupLeaderboardData;
-            if (!grpData || !grpData.zebricek) return '';
-            const myUid = window.auth?.currentUser?.uid;
-            const myIdx = grpData.zebricek.findIndex(p => p.uid === myUid);
-            return myIdx !== -1 ? `(${myIdx + 1}. z ${grpData.zebricek.length})` : `(${grpData.zebricek.length} tipérů)`;
-        },
-
         favGroupId: null, // ⚡ Okamžitá reaktivita: mění se přímo v paměti Alpine
 
         get isCurrentGroupFav() {
             if (!this.selectedGroupId) return this.favGroupId === 'GLOBAL';
             return Boolean(this.selectedGroupId && this.selectedGroupId === this.favGroupId);
         },
-
-        _groupLeaderboardData: null,
 
         // 🎯 LIGY, KTERÉ MÁ SPRÁVCE POVOLENÉ OVLÁDAT (Super Admin má vše, běžný admin jen své)
         get allowedAdminLeagues() {
@@ -1003,6 +992,27 @@ if ('serviceWorker' in navigator) {
                     img.src = `${updatedUrl}?t=${Date.now()}`;
                 }
             });
+        }
+
+        // 🔔 BLESKOVÝ SKOK Z NOTIFIKACE (PŘI BĚHU NA POZADÍ)
+        if (event.data && event.data.type === 'PUSH_NOTIFICATION_CLICK' && event.data.url) {
+            try {
+                const u = new URL(event.data.url, window.location.origin);
+                const leagueParam = u.searchParams.get('league');
+                const targetScreen = u.hash ? u.hash.replace('#', '') : 'matchesScreen';
+                const cleanLeague = leagueParam ? decodeURIComponent(leagueParam).replace(/_/g, " ") : null;
+
+                const store = window.Alpine?.store('appState');
+                if (store) {
+                    if (cleanLeague && typeof window.selectLeague === 'function') {
+                        window.selectLeague(cleanLeague, targetScreen);
+                    } else if (typeof window.goToScreen === 'function') {
+                        window.goToScreen(targetScreen);
+                    }
+                }
+            } catch (err) {
+                console.warn("Chyba navigace z notifikace:", err);
+            }
         }
     });
 

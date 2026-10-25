@@ -257,7 +257,12 @@ if (!navigator.onLine) {
                 if (hSel) { hSel.style.color = '#ffffff'; hSel.dataset.saved = String(hVal); hSel.style.borderColor = ''; }
 
                 window.showToast("⚽ Tip bezpečně uložen!");
-                window.isAppFormDirty = false;
+                window.dirtyInputsRegistry.delete(`tip-domaci-${matchId}`);
+                window.dirtyInputsRegistry.delete(`tip-hoste-${matchId}`);
+                window.dirtyInputsRegistry.delete(`playoff-user-val-${matchId}`);
+                if (typeof window.prepocitejPocitadlaTipu === 'function') {
+                    window.prepocitejPocitadlaTipu();
+                }
                 window.renderMatches(leagueName);
             }
             
@@ -1032,7 +1037,29 @@ window.prepocitejPocitadlaTipu = () => {
     window.isAppFormDirty = (dirtyComplete > 0 || incomplete > 0);
 };
 
+// ☕ BLESKOVÝ TICHÝ PŘEDEHŘEV CLOUD RUN KONTEJNERU (ODSTRANĚNÍ COLD STARTU)
+window.lastWarmupTs = 0;
+window.triggerBackendWarmup = () => {
+    const now = Date.now();
+    if (now - window.lastWarmupTs < 5 * 60 * 1000) return;
+    if (!window.auth?.currentUser || !window.functions) return;
+    window.lastWarmupTs = now;
+    try {
+        const saveUserTipsCF = httpsCallable(window.functions, 'saveUserTipsCF');
+        saveUserTipsCF({ warmup: true }).catch(() => {});
+    } catch (e) {}
+};
+
+document.addEventListener('focusin', (e) => {
+    if (e.target && (e.target.id?.startsWith('tip-domaci-') || e.target.id?.startsWith('tip-hoste-'))) {
+        window.triggerBackendWarmup();
+    }
+}, { passive: true });
+
 window.handleUserScoreChange = (matchId, isPlayoff) => {
+    if (typeof window.triggerBackendWarmup === 'function') {
+        window.triggerBackendWarmup();
+    }
     const selD = document.getElementById(`tip-domaci-${matchId}`);
     const selH = document.getElementById(`tip-hoste-${matchId}`);
     if (!selD || !selH) return;

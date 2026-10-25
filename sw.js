@@ -4,7 +4,7 @@
 // =========================================================================
 
 // 🏷️ JEDINÉ CENTRÁLNÍ MÍSTO PRAVDY PRO VERZI APLIKACE
-const APP_VERSION = 'v2.0.0';
+const APP_VERSION = 'v2.0.1';
 const CACHE_NAME = `tipnito-core-${APP_VERSION}`;
 
 // Statické a neměnné assety (Písma, ikony, externí knihovny z CDN)
@@ -233,19 +233,28 @@ self.addEventListener('notificationclick', (event) => {
     const targetUrl = new URL(rawUrl, self.location.origin).href;
 
     event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clientList) => {
+        (async () => {
+            const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+            
             for (const client of clientList) {
                 const clientOrigin = new URL(client.url, self.location.origin).origin;
                 if (clientOrigin === self.location.origin && 'focus' in client) {
-                    if ('navigate' in client) {
-                        await client.navigate(targetUrl);
-                    }
-                    return client.focus();
+                    // 🚀 1. BLESKOVÝ FOCUS: Okamžité vytažení aplikace z pozadí na displej
+                    await client.focus();
+
+                    // 📨 2. ŠETRNÁ NAVIGACE: Předání cílové soutěže do Alpine bez bílého reloadu
+                    client.postMessage({
+                        type: 'PUSH_NOTIFICATION_CLICK',
+                        url: targetUrl
+                    });
+                    return;
                 }
             }
+
+            // 📱 3. POKUD JE APLIKACE ÚPLNĚ ZAVŘENÁ: Otevřeme čisté nové okno
             if (clients.openWindow) {
-                return clients.openWindow(targetUrl);
+                return await clients.openWindow(targetUrl);
             }
-        })
+        })()
     );
 });

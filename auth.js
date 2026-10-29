@@ -256,8 +256,12 @@ window.logout = async () => {
         sessionStorage.removeItem('tipni_guest_session_id');
         store.isGuest = false;
         store.nickname = '';
-        localStorage.removeItem('savedScreen');
-        localStorage.removeItem('savedLeague');
+        // 🧹 Sanitace zařízení pro hosta
+        const zachovatKliceHost = new Set(['tipni_app_version', 'tipni_fan_graphics']);
+        Object.keys(localStorage).forEach(k => {
+            if (!zachovatKliceHost.has(k)) localStorage.removeItem(k);
+        });
+        sessionStorage.clear();
         location.reload();
         return;
     }
@@ -284,15 +288,19 @@ window.logout = async () => {
         window.activeSurveyUnsubscribe = null;
     }
 
-    // 🧹 Úklid databáze před odchodem: Kompletní promazání relačních klíčů z paměti zařízení
     const user = window.auth.currentUser;
     if (user) {
         await window.odpojRtdbPresence(user.uid);
     }
 
-    // Dokonalé vyčištění klientského stavu (zabezpečení proti míchání účtů na 1 mobilu)
-    localStorage.removeItem('savedScreen');
-    localStorage.removeItem('savedLeague');
+    // 🧹 TOTÁLNÍ SANITACE RELACE: Odstraní veškeré uživatelské mezipaměti, OVR, oblíbené party i práva
+    const zachovatKlice = new Set(['tipni_app_version', 'tipni_fan_graphics']);
+    Object.keys(localStorage).forEach(k => {
+        if (!zachovatKlice.has(k)) {
+            localStorage.removeItem(k);
+        }
+    });
+    sessionStorage.clear();
 
     await signOut(window.auth);
     location.reload();
@@ -447,9 +455,11 @@ const vykonejBezpecnyAuthRouting = (user) => {
         }
         store.isAdmin = false;
         store.isSuperAdmin = false;
+        store.godModeActive = false;
         store.adminLeagues = [];
         store.nickname = '';
         store._leagues = [];
+        store.myOvr = 0;
         
         if (typeof window.hideSplash === 'function') window.hideSplash();
         return;
@@ -486,9 +496,17 @@ const vykonejBezpecnyAuthRouting = (user) => {
         const userData = docSnap.exists() ? docSnap.data() : null;
         const targetLeagues = userData?.leagues || [];
 
-        // ⚡ OKAMŽITÁ HYDRATACE Z DISKOVÉ CACHE (0 ms bez čekání na síť)
+        // 🛡️ COLD CACHE GUARD: Pokud je lokální paměť po smazání mezipaměti prázdná, čekáme na odpověď serveru
+        if (!docSnap.exists() && docSnap.metadata.fromCache) {
+            return;
+        }
+
+        // ⚡ OKAMŽITÁ HYDRATACE: Autorizovaná data profilu
         store.isSuperAdmin = userData?.isSuperAdmin === true;
         store.isAdmin = userData?.isAdmin === true || store.isSuperAdmin;
+        if (!store.isSuperAdmin) {
+            store.godModeActive = false;
+        }
         store.adminLeagues = userData?.adminLeagues || [];
         store.canLinkGoogle = !user.providerData.some(p => p.providerId === 'google.com');
         store.leagueOrder = userData?.leagueOrder || [];

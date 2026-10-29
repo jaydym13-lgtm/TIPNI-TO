@@ -1528,6 +1528,7 @@ const adminManageGroupCF = onCall({
 });
 
 module.exports = {
+  vyzviBotaKPrepoctu, // 👈 Přidat tento export
   manageUserPermissionsCF,
   purgeUserAbsoluteCF,
   saveProxyDataCF,

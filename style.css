@@ -9338,3 +9338,47 @@ body .custom-dropdown-item {
     50% { transform: scale(1.03); }
     100% { transform: scale(0.97); }
 }
+
+/* 👀 ELEGANTNÍ LIŠTA DIVÁKA S TLAČÍTKEM */
+.league-preview-card {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.league-preview-card span {
+    color: #94a3b8;
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-family: 'Segoe UI', sans-serif;
+    letter-spacing: 0.3px;
+}
+
+.btn-join-league {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border: 1px solid #34d399;
+    color: #ffffff;
+    height: 32px;
+    padding: 0 12px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+    margin: 0;
+    transition: transform 0.15s ease;
+}
+
+.btn-join-league:active {
+    transform: scale(0.96);
+}

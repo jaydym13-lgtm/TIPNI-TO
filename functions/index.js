@@ -9,7 +9,7 @@ require("./init");
 const tips = require("./tips");
 exports.saveUserTipsCF = tips.saveUserTipsCF;
 exports.saveBonusTipsCF = tips.saveBonusTipsCF;
-exports.registerNicknameCF = tips.registerNicknameCF;
+exports.joinLeagueCF = tips.joinLeagueCF;
 
 // 3. Administrace, Rekalkulace žebříčků & Loutkovodič (admin.js)
 const adminModule = require("./admin");

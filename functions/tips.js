@@ -232,8 +232,60 @@ const registerNicknameCF = onCall({ cors: true }, async (request) => {
   }
 });
 
+// ➕ FUNKCE 9: Bezpečné přiřazení ligy hráčem & probuzení bota server-to-server
+const joinLeagueCF = onCall({ cors: true }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Pro účast v soutěži musíš být přihlášen!");
+  }
+
+  const uid = request.auth.uid;
+  const leagueName = (request.data?.leagueName || "").trim();
+
+  const POVOLENE_LIGY = [
+    'Chance Liga', 'Premier League', 'Tipsport Extraliga', 
+    'Liga mistrů', 'MS v hokeji', 'MS ve fotbale'
+  ];
+
+  if (!POVOLENE_LIGY.includes(leagueName)) {
+    throw new HttpsError("invalid-argument", `Soutěž "${leagueName}" není v systému povolena!`);
+  }
+
+  try {
+    // 1. Zápis do profilu ve Firestore
+    const userRef = db.collection("users").doc(uid);
+    await userRef.update({
+      leagues: admin.firestore.FieldValue.arrayUnion(leagueName)
+    });
+
+    // 2. Okamžitá synchronizace RTDB admin_roster (aby v administraci nezůstala čekárna)
+    try {
+      const { getDatabase } = require("firebase-admin/database");
+      const rtdb = getDatabase();
+      const rosterRef = rtdb.ref(`admin_roster/${uid}/leagues`);
+      const snap = await rosterRef.get();
+      const cur = snap.val() || [];
+      if (!cur.includes(leagueName)) {
+        cur.push(leagueName);
+        await rosterRef.set(cur);
+      }
+    } catch (rtdbErr) {
+      console.warn("RTDB sync varování při joinLeagueCF:", rtdbErr.message);
+    }
+
+    // 3. Spolehlivý budíček bota přes interního dispečera (s AWAIT, aby Cloud Functions nezmrazily spojení)
+    const { vyzviBotaKPrepoctu } = require("./admin");
+    await vyzviBotaKPrepoctu(leagueName);
+
+    return { success: true, leagueName };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    throw new HttpsError("internal", error.message);
+  }
+});
+
 module.exports = {
   saveUserTipsCF,
   saveBonusTipsCF,
-  registerNicknameCF
+  registerNicknameCF,
+  joinLeagueCF
 };

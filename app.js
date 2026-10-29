@@ -3,7 +3,7 @@
 // =========================================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app-check.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, doc, getDoc, setDoc, onSnapshot, updateDoc, serverTimestamp, disableNetwork, enableNetwork, setLogLevel } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, doc, getDoc, setDoc, onSnapshot, updateDoc, serverTimestamp, disableNetwork, enableNetwork, setLogLevel, arrayUnion } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 import { getFunctions } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-functions.js";
 import { CONFIG } from "./config.js";
@@ -419,12 +419,14 @@ const vstrikniStoresDoPameti = () => {
             return this._filtrujAseradLigy(this._leagues || []);
         },
 
-        // 👀 NEAKTIVNÍ SOUTĚŽE K NAHLÉDNUTÍ (SHOWROOM DOLE)
+        // 👀 NEAKTIVNÍ SOUTĚŽE K NAHLÉDNUTÍ (SHOWROOM DOLE + AUTOMATICKÝ NÁHLED PRO NOVÁČKY)
         get previewLeagues() {
             const _tick = this.leagueFilterTick;
-            if (this.isSuperAdmin || this.isGuest || !this.showAllLeagues) return [];
-            const MASTER_LIGY = CONFIG.MASTER_LEAGUES || [];
+            if (this.isSuperAdmin || this.isGuest) return [];
             const moje = this._leagues || [];
+            // Pokud nováček nemá žádnou ligu, automaticky mu otevřeme všechny soutěže k nahlédnutí
+            if (!this.showAllLeagues && moje.length > 0) return [];
+            const MASTER_LIGY = CONFIG.MASTER_LEAGUES || [];
             const kNahledu = MASTER_LIGY.filter(l => !moje.includes(l));
             return this._filtrujAseradLigy(kNahledu);
         },
@@ -805,147 +807,152 @@ const vstrikniStoresDoPameti = () => {
     // 🚀 Aktivujeme kontrolu nepřečtených novinek
     Alpine.store('appState').obnovChangelogStav();
 
-    // 🟢 NATIVNÍ ŽIVÝ RADAR PŘÍTOMNOSTI Z REALTIME DATABASE (0 KČ, 0 FIRESTORE READS)
-    const statusRef = rtdbRef(rtdb, 'status');
-    onRtdbValue(statusRef, (snap) => {
-        const data = snap.val() || {};
-        const allUids = Object.keys(data);
-        const onlineUids = allUids.filter(uid => data[uid] && data[uid].online === true);
-        const store = Alpine.store('appState');
-        if (store) {
-            store.communityOnline = onlineUids.length;
-            store.onlineUidsSet = new Set(onlineUids);
-            store.communityPresenceMap = data;
-            // 🎨 Synchronizace stavu grafiky z RTDB pro přihlášeného uživatele
-            const myUid = window.auth?.currentUser?.uid;
-            if (myUid && data[myUid] && typeof data[myUid].richGraphics === 'boolean') {
-                if (store.fanGraphics !== data[myUid].richGraphics) {
-                    store.fanGraphics = data[myUid].richGraphics;
-                    localStorage.setItem('tipni_fan_graphics', data[myUid].richGraphics ? 'true' : 'false');
-                    store.leagueFilterTick++;
-                }
-            }
-            if (typeof window.obnovZivouPritomnostSuperAdmin === 'function') {
-                window.obnovZivouPritomnostSuperAdmin();
-            }
-        }
-    });
+    // 📡 ODLEHČENÝ SPOUŠTĚČ RADARŮ: Spustí se až při reálném vstupu na herní obrazovku
+	let _realtimeRadarySpusteny = false;
+	window.spustGlobalniRealtimeRadary = () => {
+		if (_realtimeRadarySpusteny) return;
+		_realtimeRadarySpusteny = true;
 
-    // ⏱️ ŽIVÉ MINUTY A STAV ZÁPASŮ (0 FIRESTORE READS, 0 KČ, WEBSOCKET PUSH)
-    const liveTicksRef = rtdbRef(rtdb, 'live_ticks');
-    // 🏛️ BLESKOVÝ RTDB STRÁŽCE SÍNĚ SLÁVY (0ms zpoždění při aktualizaci žebříčku)
-    const hofPulseRef = rtdbRef(rtdb, 'system/hof_pulse');
-    let isFirstHofPulse = true;
-    onRtdbValue(hofPulseRef, async (snap) => {
-        if (isFirstHofPulse) {
-            isFirstHofPulse = false;
-            return;
-        }
-        const store = Alpine.store('appState');
-        if (!store) return;
-        const sezId = store.activeSeason || window.SEZONA_ID || "2026_2027";
-        try {
-            const res = await fetch(`${CONFIG.R2_BASE_URL}/sezony/${sezId}/hall_of_fame.json?v=${Date.now()}`);
-            if (res.ok) {
-                const freshHof = await res.json();
-                store.hallOfFameData = freshHof;
-                try { localStorage.setItem(`tipni_cache_hof_${sezId}`, JSON.stringify(freshHof)); } catch(e){}
-                const currentUid = window.auth?.currentUser?.uid;
-                const meInHof = (freshHof.all || freshHof.players)?.find(p => p.uid === currentUid);
-                if (meInHof) {
-                    store.myOvr = meInHof.masterOvr || meInHof.ovr;
-                    localStorage.setItem('tipni_cache_my_ovr', String(store.myOvr));
-                }
-                if (store.currentScreen === 'hallOfFameScreen' && typeof window.renderHallOfFame === 'function') {
-                    window.renderHallOfFame(window.hofActiveFilter || 'ALL');
-                }
-            }
-        } catch(e) {}
-    });
-    onRtdbValue(liveTicksRef, (snap) => {
-        const data = snap.val() || {};
-        const store = Alpine.store('appState');
-        if (store) {
-            store.liveTicks = data;
-        }
-    });
-    const guestPresenceRef = rtdbRef(rtdb, 'guest_presence');
-    onRtdbValue(guestPresenceRef, (snap) => {
-        const data = snap.val() || {};
-        const count = Object.keys(data).length;
-        const store = Alpine.store('appState');
-        if (store) {
-            store.guestOnlineCount = count;
-            if (typeof window.obnovZivouPritomnostSuperAdmin === 'function') {
-                window.obnovZivouPritomnostSuperAdmin();
-            }
-        }
-    });
+		const statusRef = rtdbRef(rtdb, 'status');
+		onRtdbValue(statusRef, (snap) => {
+			const data = snap.val() || {};
+			const allUids = Object.keys(data);
+			const onlineUids = allUids.filter(uid => data[uid] && data[uid].online === true);
+			const store = Alpine.store('appState');
+			if (store) {
+				store.communityOnline = onlineUids.length;
+				store.onlineUidsSet = new Set(onlineUids);
+				store.communityPresenceMap = data;
+				const myUid = window.auth?.currentUser?.uid;
+				if (myUid && data[myUid] && typeof data[myUid].richGraphics === 'boolean') {
+					if (store.fanGraphics !== data[myUid].richGraphics) {
+						store.fanGraphics = data[myUid].richGraphics;
+						localStorage.setItem('tipni_fan_graphics', data[myUid].richGraphics ? 'true' : 'false');
+						store.leagueFilterTick++;
+					}
+				}
+				if (typeof window.obnovZivouPritomnostSuperAdmin === 'function') {
+					window.obnovZivouPritomnostSuperAdmin();
+				}
+			}
+		});
 
-    const guestStatsRef = rtdbRef(rtdb, 'guest_stats');
-    onRtdbValue(guestStatsRef, (snap) => {
-        const data = snap.val() || {};
-        const store = Alpine.store('appState');
-        if (store) {
-            store.guestTotalVisits = data.total || 0;
-            store.guestLastSeen = data.lastSeen || null;
-            if (typeof window.obnovZivouPritomnostSuperAdmin === 'function') {
-                window.obnovZivouPritomnostSuperAdmin();
-            }
-        }
-    });
+		const liveTicksRef = rtdbRef(rtdb, 'live_ticks');
+		onRtdbValue(liveTicksRef, (snap) => {
+			const data = snap.val() || {};
+			const store = Alpine.store('appState');
+			if (store) {
+				store.liveTicks = data;
+			}
+		});
 
-    // 📡 GLOBÁLNÍ PŘIJÍMAČ MAJÁKU: Tichá aktualizace L1 RAM Cache pro soutěže na pozadí
-    const globalPulseRef = rtdbRef(rtdb, 'system/leagues_pulse');
-    let isFirstGlobalPulse = true;
-    onRtdbValue(globalPulseRef, (snap) => {
-        const pulses = snap.val() || {};
-        if (isFirstGlobalPulse) {
-            isFirstGlobalPulse = false;
-            Object.entries(pulses).forEach(([lKlic, p]) => {
-                if (p?.ts) window.lastKnownPulsSignatures[p.league || lKlic.replace(/_/g, ' ')] = p.ts;
-            });
-            return;
-        }
+		const hofPulseRef = rtdbRef(rtdb, 'system/hof_pulse');
+		let isFirstHofPulse = true;
+		onRtdbValue(hofPulseRef, async (snap) => {
+			if (isFirstHofPulse) {
+				isFirstHofPulse = false;
+				return;
+			}
+			const store = Alpine.store('appState');
+			if (!store) return;
+			const sezId = store.activeSeason || window.SEZONA_ID || "2026_2027";
+			try {
+				const res = await fetch(`${CONFIG.R2_BASE_URL}/sezony/${sezId}/hall_of_fame.json?v=${Date.now()}`);
+				if (res.ok) {
+					const freshHof = await res.json();
+					store.hallOfFameData = freshHof;
+					try { localStorage.setItem(`tipni_cache_hof_${sezId}`, JSON.stringify(freshHof)); } catch(e){}
+					const currentUid = window.auth?.currentUser?.uid;
+					const meInHof = (freshHof.all || freshHof.players)?.find(p => p.uid === currentUid);
+					if (meInHof) {
+						store.myOvr = meInHof.masterOvr || meInHof.ovr;
+						localStorage.setItem('tipni_cache_my_ovr', String(store.myOvr));
+					} else {
+						store.myOvr = 0;
+						localStorage.removeItem('tipni_cache_my_ovr');
+					}
+					if (store.currentScreen === 'hallOfFameScreen' && typeof window.renderHallOfFame === 'function') {
+						window.renderHallOfFame(window.hofActiveFilter || 'ALL');
+					}
+				}
+			} catch(e) {}
+		});
 
-        const store = Alpine.store('appState');
-        if (!store) return;
+		const guestPresenceRef = rtdbRef(rtdb, 'guest_presence');
+		onRtdbValue(guestPresenceRef, (snap) => {
+			const data = snap.val() || {};
+			const count = Object.keys(data).length;
+			const store = Alpine.store('appState');
+			if (store) {
+				store.guestOnlineCount = count;
+				if (typeof window.obnovZivouPritomnostSuperAdmin === 'function') {
+					window.obnovZivouPritomnostSuperAdmin();
+				}
+			}
+		});
 
-        Object.entries(pulses).forEach(([lKlic, pData]) => {
-            if (!pData || !pData.ts) return;
-            const lName = pData.league || lKlic.replace(/_/g, ' ');
+		const guestStatsRef = rtdbRef(rtdb, 'guest_stats');
+		onRtdbValue(guestStatsRef, (snap) => {
+			const data = snap.val() || {};
+			const store = Alpine.store('appState');
+			if (store) {
+				store.guestTotalVisits = data.total || 0;
+				store.guestLastSeen = data.lastSeen || null;
+				if (typeof window.obnovZivouPritomnostSuperAdmin === 'function') {
+					window.obnovZivouPritomnostSuperAdmin();
+				}
+			}
+		});
 
-            // Pokud má hráč tuto ligu právě otevřenou, obslouží ji aktivní radar v zapniZiveStreamy
-            if (store.selectedLeague === lName) return;
+		const globalPulseRef = rtdbRef(rtdb, 'system/leagues_pulse');
+		let isFirstGlobalPulse = true;
+		onRtdbValue(globalPulseRef, (snap) => {
+			const pulses = snap.val() || {};
+			if (isFirstGlobalPulse) {
+				isFirstGlobalPulse = false;
+				Object.entries(pulses).forEach(([lKlic, p]) => {
+					if (p?.ts) window.lastKnownPulsSignatures[p.league || lKlic.replace(/_/g, ' ')] = p.ts;
+				});
+				return;
+			}
 
-            const staryTs = window.lastKnownPulsSignatures[lName] || 0;
-            if (pData.ts > staryTs) {
-                window.lastKnownPulsSignatures[lName] = pData.ts;
+			const store = Alpine.store('appState');
+			if (!store) return;
 
-                // Tichá mikro-aktualizace RAM cache na pozadí přes requestIdleCallback
-                const sezId = store.activeSeason || window.SEZONA_ID || "2026_2027";
-                const aktualizujCacheNaPozadi = async () => {
-                    try {
-                        const res = await fetch(`${CONFIG.R2_BASE_URL}/sezony/${sezId}/${lKlic}/rozpis.json?v=${pData.ts}`);
-                        if (res.ok) {
-                            const freshRozpis = await res.json();
-                            if (store.leaguesMemoryCache?.[lName]) {
-                                store.leaguesMemoryCache[lName].rozpisData = freshRozpis;
-                            }
-                            try { localStorage.setItem(`tipni_cache_rozpis_${sezId}_${lKlic}`, JSON.stringify(freshRozpis)); } catch(e){}
-                            store.leagueFilterTick++;
-                        }
-                    } catch(e) {}
-                };
+			Object.entries(pulses).forEach(([lKlic, pData]) => {
+				if (!pData || !pData.ts) return;
+				const lName = pData.league || lKlic.replace(/_/g, ' ');
 
-                if ('requestIdleCallback' in window) {
-                    window.requestIdleCallback(aktualizujCacheNaPozadi);
-                } else {
-                    setTimeout(aktualizujCacheNaPozadi, 100);
-                }
-            }
-        });
-    });
+				if (store.selectedLeague === lName) return;
+
+				const staryTs = window.lastKnownPulsSignatures[lName] || 0;
+				if (pData.ts > staryTs) {
+					window.lastKnownPulsSignatures[lName] = pData.ts;
+
+					const sezId = store.activeSeason || window.SEZONA_ID || "2026_2027";
+					const aktualizujCacheNaPozadi = async () => {
+						try {
+							const res = await fetch(`${CONFIG.R2_BASE_URL}/sezony/${sezId}/${lKlic}/rozpis.json?v=${pData.ts}`);
+							if (res.ok) {
+								const freshRozpis = await res.json();
+								if (store.leaguesMemoryCache?.[lName]) {
+									store.leaguesMemoryCache[lName].rozpisData = freshRozpis;
+								}
+								try { localStorage.setItem(`tipni_cache_rozpis_${sezId}_${lKlic}`, JSON.stringify(freshRozpis)); } catch(e){}
+								store.leagueFilterTick++;
+							}
+						} catch(e) {}
+					};
+
+					if ('requestIdleCallback' in window) {
+						window.requestIdleCallback(aktualizujCacheNaPozadi);
+					} else {
+						requestAnimationFrame(aktualizujCacheNaPozadi);
+					}
+				}
+			});
+		});
+	};
 };
 
 if (window.Alpine) {
@@ -1297,11 +1304,18 @@ const initTipniToAlpine = () => {
             await window.nacistAdminModul();
         }
 
-            // 🔒 AUTO-RESET: Při odchodu ze žebříčku automaticky zavřeme roletku rekordů i všechny rozbalené karty hráčů
-            if (screenName !== 'leaderboardScreen') {
-                window.leaderboardRecordsOpen = false;
-                window.rozbaleneUidsCacheGlobal = [];
-            }
+            // 🚀 BLESKOVÝ START: Realtime WebSockety zapneme až po opuštění úvodních načítacích clon
+		if (screenName !== 'splashScreen' && screenName !== 'loginScreen' && screenName !== 'nicknameScreen') {
+			if (typeof window.spustGlobalniRealtimeRadary === 'function') {
+				window.spustGlobalniRealtimeRadary();
+			}
+		}
+
+		// 🔒 AUTO-RESET: Při odchodu ze žebříčku automaticky zavřeme roletku rekordů i všechny rozbalené karty hráčů
+		if (screenName !== 'leaderboardScreen') {
+			window.leaderboardRecordsOpen = false;
+			window.rozbaleneUidsCacheGlobal = [];
+		}
 
             // 🔒 AUTO-RESET ADMIN & SUPERADMIN: Zavření všech roletek hráčů
             store.adminOpenedUserId = null;
@@ -1650,6 +1664,48 @@ const initTipniToAlpine = () => {
             }
         }
     };
+    
+// ➕ PŘIPOJENÍ K SOUTĚŽI Z REŽIMU NÁHLEDU (DIVÁK -> TIPÉR)
+        window.pripojitSeKLize = async (leagueName) => {
+            const user = window.auth?.currentUser;
+            const store = Alpine.store('appState');
+            if (!user) {
+                if (typeof window.showToast === 'function') window.showToast("⚠️ Pro účast v tipovačce se musíš přihlásit!", true);
+                return;
+            }
+            if (!leagueName) return;
+
+            if (typeof window.showSplash === 'function') {
+                window.showSplash("Připojuji tě k soutěži...");
+            }
+
+            try {
+                const { httpsCallable } = await import("https://www.gstatic.com/firebasejs/11.0.0/firebase-functions.js");
+                const joinLeagueCF = httpsCallable(window.functions, 'joinLeagueCF');
+                await joinLeagueCF({ leagueName });
+
+                if (store) {
+                    const cur = store._leagues || [];
+                    if (!cur.includes(leagueName)) {
+                        store._leagues = [...cur, leagueName];
+                        store.leagueFilterTick++;
+                    }
+                }
+
+                if (typeof window.showToast === 'function') {
+                    window.showToast(`🎉 Vítej v tipovačce ${leagueName}! Můžeš tipovat.`);
+                }
+            } catch (err) {
+                console.error("Chyba při připojování k soutěži:", err);
+                if (typeof window.showToast === 'function') {
+                    window.showToast("❌ Chyba: " + (err.message || "Nepodařilo se připojit k soutěži."), true);
+                }
+            } finally {
+                if (typeof window.hideSplash === 'function') {
+                    window.hideSplash();
+                }
+            }
+        };
 
     window.globalLivePulsUnsubscribe = window.globalLivePulsUnsubscribe || null;
     window.lastKnownPulsSignatures = window.lastKnownPulsSignatures || {};
@@ -2046,9 +2102,12 @@ const initTipniToAlpine = () => {
                     const currentUid = window.auth?.currentUser?.uid;
                     const meInHof = (hofData.all || hofData.players)?.find(p => p.uid === currentUid);
                     if (meInHof) {
-                        store.myOvr = meInHof.masterOvr || meInHof.ovr;
-                        localStorage.setItem('tipni_cache_my_ovr', String(store.myOvr));
-                    }
+        store.myOvr = meInHof.masterOvr || meInHof.ovr;
+        localStorage.setItem('tipni_cache_my_ovr', String(store.myOvr));
+    } else {
+        store.myOvr = 0;
+        localStorage.removeItem('tipni_cache_my_ovr');
+    }
                 }
             }).catch(() => {});
 
@@ -2195,84 +2254,48 @@ const initTipniToAlpine = () => {
 	};
 };
 
-// 📡 GLOBÁLNÍ LIVE RADAR Z R2 (0 FIRESTORE READS, 0 KČ)
-window.zkontrolujLiveRadarGlobalne = async () => {
-    if (document.hidden || !navigator.onLine) return;
-    const store = window.Alpine?.store('appState');
-    if (!store) return;
-    const sezId = store.activeSeason || window.SEZONA_ID || "2026_2027";
-
-    try {
-        const res = await fetch(`${CONFIG.R2_BASE_URL}/sezony/${sezId}/live_radar.json?v=${Date.now()}`);
-        if (res.ok) {
-            const data = await res.json();
-            if (data && typeof data === 'object') {
-                const staryStr = JSON.stringify(store.liveLeaguesMap || {});
-                const novyStr = JSON.stringify(data);
-                if (staryStr !== novyStr) {
-                    store.liveLeaguesMap = data;
-                    try { localStorage.setItem('tipni_cache_live_map', novyStr); } catch(e){}
-                }
-            }
-        }
-    } catch (e) {}
-};
-
-// 🔋 NÍZKOENERGETICKÝ RADAROVÝ ČASOVAČ (BĚŽÍ POUZE PŘI ROZSVÍCENÉM DISPLEJI)
-window.liveRadarIntervalGlobal = setInterval(window.zkontrolujLiveRadarGlobalne, 25000);
-
-// 📱 INTELIGENTNÍ REŽIM SPÁNKU & PROBUZENÍ SÍTĚ (ZERO BATTERY DRAIN)
+// 📱 INTELIGENTNÍ REŽIM SPÁNKU & PROBUZENÍ SÍTĚ (ČISTÝ EVENT-DRIVEN SYSTÉM BEZ POLLINGU)
 document.addEventListener("visibilitychange", async () => {
-    const store = window.Alpine?.store('appState');
+	const store = window.Alpine?.store('appState');
 
-    // 💤 1. MOBIL JDE DO KAPSY (USPAT VŠECHNO)
-    if (document.hidden) {
-        if (window.liveRadarIntervalGlobal) {
-            clearInterval(window.liveRadarIntervalGlobal);
-            window.liveRadarIntervalGlobal = null;
-        }
+	// 💤 1. MOBIL JDE DO KAPSY (USPAT SÍŤ A UKLIDIT ZDROJE)
+	if (document.hidden) {
+		// 🛡️ TICHÝ ZÁCHRANNÝ AUTO-FLUSH: Pokud hráč zamkne mobil s neuloženými tipy, odešleme je na pozadí
+		if (store && store.currentScreen === 'matchesScreen' && store.dirtyTipsCount > 0 && store.selectedLeague && typeof window.saveAllUserTips === 'function') {
+			window.saveAllUserTips(store.selectedLeague, null, true);
+		}
+		if (window.liveIntervalRadar) {
+			clearInterval(window.liveIntervalRadar);
+			window.liveIntervalRadar = null;
+		}
+		if (typeof window.globalLiveMenuUnsubscribe === 'function') {
+			window.globalLiveMenuUnsubscribe();
+		}
+		try { await disableNetwork(db); } catch (e) {}
+	} 
+	// ⚡ 2. MOBIL VYTAŽEN Z KAPSY (BLESKOVÉ PROBUZENÍ POUZE PŘES WEBSOCKET)
+	else {
+		try { await enableNetwork(db); } catch (e) {}
+		try { if (rtdb) goOnline(rtdb); } catch (e) {}
 
-        // 🛡️ TICHÝ ZÁCHRANNÝ AUTO-FLUSH: Pokud hráč zamkne mobil s neuloženými tipy, odešleme je na pozadí
-        if (store && store.currentScreen === 'matchesScreen' && store.dirtyTipsCount > 0 && store.selectedLeague && typeof window.saveAllUserTips === 'function') {
-            window.saveAllUserTips(store.selectedLeague, null, true);
-        }
-        if (window.liveIntervalRadar) {
-            clearInterval(window.liveIntervalRadar);
-            window.liveIntervalRadar = null;
-        }
-        if (typeof window.globalLiveMenuUnsubscribe === 'function') {
-            window.globalLiveMenuUnsubscribe();
-        }
-        try { await disableNetwork(db); } catch (e) {}
-    } 
-    // ⚡ 2. MOBIL VYTAŽEN Z KAPSY (BLESKOVÉ PROBUZENÍ)
-    else {
-        try { await enableNetwork(db); } catch (e) {}
-        try { if (rtdb) goOnline(rtdb); } catch (e) {}
+		// 🍏 iOS WebKit WAKEUP PULSE: Okamžitá obnova tokenu
+		if (window.auth?.currentUser) {
+			window.auth.currentUser.getIdToken(true).catch(() => {});
+		}
 
-        // 🍏 iOS WebKit WAKEUP PULSE: Okamžitá obnova tokenu a přítomnosti
-        if (window.auth?.currentUser) {
-            window.auth.currentUser.getIdToken(true).catch(() => {});
-        }
+		if (window.pendingAppReload && !window.isAppFormDirty) {
+			window.location.reload();
+			return;
+		}
 
-        if (!window.liveRadarIntervalGlobal) {
-            window.liveRadarIntervalGlobal = setInterval(window.zkontrolujLiveRadarGlobalne, 25000);
-        }
+		if (window.swRegistration) {
+			window.swRegistration.update().catch(() => {});
+		}
 
-        if (window.pendingAppReload && !window.isAppFormDirty) {
-            window.location.reload();
-            return;
-        }
-
-        if (window.swRegistration) {
-            window.swRegistration.update().catch(() => {});
-        }
-
-        window.zkontrolujLiveRadarGlobalne();
-        if (store?.selectedLeague) {
-            window.zapniZiveStreamy(store.selectedLeague);
-        }
-    }
+		if (store?.selectedLeague) {
+			window.zapniZiveStreamy(store.selectedLeague);
+		}
+	}
 });
 
 // 🎯 SMART NAVIGATOR: Otevře výsledky a při přechodu odjinud nastaví první náhled kola

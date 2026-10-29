@@ -4,18 +4,25 @@
 
 <head>
     <meta charset="UTF-8">
-    <!-- 🛡️ SENTRY ERROR TRACKING (DEFEROVANÉ NAČTENÍ PRO BLESKOVÝ START) -->
+    <!-- ⚡ SÍŤOVÝ NÁSKOK: Okamžité paralelní otevření TLS kanálů k CDN knihovnám -->
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="https://www.gstatic.com">
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+    <!-- 🛡️ SENTRY ERROR TRACKING: Spustí se až po kompletním načtení stránky (uvolňuje kritickou cestu) -->
     <script defer src="https://js-de.sentry-cdn.com/a2c6e821784ab0aa1f3fc28b91e25cc2.min.js" crossorigin="anonymous"></script>
     <script>
-        window.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('load', () => {
             if (window.Sentry && typeof Sentry.onLoad === 'function') {
                 Sentry.onLoad(function() {
                     Sentry.init({});
                 });
             }
-        });
+        }, { once: true });
     </script>
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <link rel="icon" type="image/png" href="img/favicon192.png">
     <link rel="manifest" href="manifest.json">
     <meta name="mobile-web-app-capable" content="yes">
@@ -478,9 +485,12 @@
                 📜 TATO SEZÓNA JE V ARCHIVU (POUZE PRO ČTENÍ)
             </div>
 
-            <!-- 👀 BANNER NEZÁVAZNÉHO NÁHLEDU (SHOWROOM) -->
-            <div x-show="!$store.appState.isEnrolledInSelectedLeague && !$store.appState.isArchived" x-cloak class="league-preview-banner">
-                👀 NEZÁVAZNÝ NÁHLED • TUTO SOUTĚŽ NEMÁŠ V LICENCI (TIPOVÁNÍ UZAMČENO)
+            <!-- 👀 BANNER NÁHLEDU (DIVÁK S TLAČÍTKEM PRO PŘIPOJENÍ) -->
+            <div x-show="!$store.appState.isEnrolledInSelectedLeague && !$store.appState.isArchived" x-cloak class="league-preview-card">
+                <span>👀 Prohlížíš soutěž v režimu náhledu</span>
+                <button type="button" class="btn-join-league" @click="window.pripojitSeKLize($store.appState.selectedLeague)">
+                    ➕ PŘIDAT SE DO SOUTĚŽE
+                </button>
             </div>
             
             <!-- 👥 PŘEPÍNAČ PARTIČEK (HNED POD HORNÍM PEVNÝM PANELEM) -->
@@ -859,7 +869,15 @@
     <div id="leaderboardScreen" class="screen-scroll league-themed-screen" x-show="$store.appState?.currentScreen === 'leaderboardScreen'" x-cloak>
         <div class="app-container app-container-padding">
 
-        <!-- 👥 PŘEPÍNAČ PARTIČEK (HNED POD HORNÍM PEVNÝM PANELEM) -->
+        <!-- 👀 BANNER NÁHLEDU (DIVÁK) -->
+            <div x-show="!$store.appState.isEnrolledInSelectedLeague && !$store.appState.isArchived" x-cloak class="league-preview-card">
+                <span>👀 Prohlížíš soutěž v režimu náhledu</span>
+                <button type="button" class="btn-join-league" @click="window.pripojitSeKLize($store.appState.selectedLeague)">
+                    ➕ PŘIDAT SE DO SOUTĚŽE
+                </button>
+            </div>
+
+            <!-- 👥 PŘEPÍNAČ PARTIČEK (HNED POD HORNÍM PEVNÝM PANELEM) -->
             <div class="group-select-bar-wrapper" x-show="$store.appState?.selectedLeague" x-cloak>
                 <div class="group-select-bar" @click="window.openGroupModal()">
                     <div class="group-select-bar-left">
@@ -1242,6 +1260,14 @@
     <div id="scoringScreen" class="screen-scroll league-themed-screen" x-show="$store.appState?.currentScreen === 'scoringScreen'" x-cloak>
         <div class="app-container app-container-padding">
 
+            <!-- 👀 BANNER NÁHLEDU (DIVÁK) -->
+            <div x-show="!$store.appState.isEnrolledInSelectedLeague && !$store.appState.isArchived" x-cloak class="league-preview-card">
+                <span>👀 Prohlížíš soutěž v režimu náhledu</span>
+                <button type="button" class="btn-join-league" @click="window.pripojitSeKLize($store.appState.selectedLeague)">
+                    ➕ PŘIDAT SE DO SOUTĚŽE
+                </button>
+            </div>
+
             <!-- 👥 PŘEPÍNAČ PARTIČEK (HNED POD HORNÍM PEVNÝM PANELEM) -->
             <div class="group-select-bar-wrapper" x-show="$store.appState?.selectedLeague" x-cloak>
                 <div class="group-select-bar" @click="window.openGroupModal()">
@@ -1301,6 +1327,14 @@
     <!-- 🏆 CUP SCREEN -->
     <div id="cupScreen" class="screen-scroll league-themed-screen" x-show="$store.appState?.currentScreen === 'cupScreen'" x-cloak>
         <div class="app-container app-container-padding">
+
+            <!-- 👀 BANNER NÁHLEDU (DIVÁK) -->
+            <div x-show="!$store.appState.isEnrolledInSelectedLeague && !$store.appState.isArchived" x-cloak class="league-preview-card">
+                <span>👀 Prohlížíš soutěž v režimu náhledu</span>
+                <button type="button" class="btn-join-league" @click="window.pripojitSeKLize($store.appState.selectedLeague)">
+                    ➕ PŘIDAT SE DO SOUTĚŽE
+                </button>
+            </div>
 
             <!-- 🌍 GLOBÁLNÍ CELOLIGOVÝ ŠTÍTEK (POHÁR JE PRO CELOU LIGU) -->
             <div class="group-select-bar-wrapper" x-show="$store.appState?.selectedLeague" x-cloak>

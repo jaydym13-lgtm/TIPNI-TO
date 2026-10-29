@@ -31,7 +31,7 @@ service cloud.firestore {
         )
       );
 
-      // 🛡️ NEPRŮSTŘELNÝ UPDATE: Super Admin smí vše, hráč smí upravit profil, 24h cooldown na pořadí
+      // 🛡️ UPDATE: Hráč smí upravit profil a přidat si oficiální ligy (max 10)
       allow update: if isLogged() && (
         isSuperAdmin() ||
         (
@@ -43,8 +43,18 @@ service cloud.firestore {
           // 🛑 ZÁKAZ ZMĚNY ADMIN PRÁV A KOMPETENCÍ
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin', 'isSuperAdmin', 'adminLeagues']) &&
           
-          // 🏆 LICENCE: Běžný hráč nesmí pole 'leagues' vůbec měnit (spravuje výhradně Super Admin)
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['leagues']) &&
+          // 🏆 LICENCE: Hráč si smí přidat jen oficiální ligy ze schváleného číselníku (max 10)
+          (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['leagues']) ||
+            (
+              request.resource.data.get('leagues', []) is list &&
+              request.resource.data.get('leagues', []).size() <= 10 &&
+              request.resource.data.get('leagues', []).hasOnly([
+                'Chance Liga', 'Premier League', 'Tipsport Extraliga', 
+                'Liga mistrů', 'MS v hokeji', 'MS ve fotbale'
+              ])
+            )
+          ) &&
           
           // ⏱️ 24H COOLDOWN & INTEGRITA: Platí pouze pro uživatelské pořadí soutěží (leagueOrder)
           (
@@ -112,10 +122,8 @@ service cloud.firestore {
       allow write: if isAdmin();
 
       match /hlasy/{userId} {
-        // Hráč vidí jen svůj hlas, admin vidí všechny (pro audit jmen)
         allow read: if isLogged() && (request.auth.uid == userId || isAdmin());
         
-        // Hlasovat lze pouze pod svým UID, v běžící anketě před deadlinem
         allow create, update: if isLogged() && (
           isAdmin() ||
           (

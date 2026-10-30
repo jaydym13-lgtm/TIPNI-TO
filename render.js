@@ -195,9 +195,17 @@ window.saveTip = async (matchId, leagueName, event) => {
     try {
         const ligaKlic = leagueName.replace(/ /g, '_');
         
-        // 🔥 SERVEROVÝ POHON S 15S TIMEOUTEM PROTI ZAMRZNUTÍ NA iOS
-        try { await user.getIdToken(); } catch (e) {}
-        const saveUserTipsCF = httpsCallable(window.functions, 'saveUserTipsCF', { timeout: 15000 });
+        // 🛡️ BLESKOVÁ OBNOVA TOKENU S PEVNÝM TIMEOUTEM (MAX 3.5s PROTI ZÁSEKU)
+        try {
+            await Promise.race([
+                user.getIdToken(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("Token timeout")), 3500))
+            ]);
+        } catch (e) {
+            console.warn("Rychlá obnova tokenu vypršela, pokračuji:", e.message);
+        }
+
+        const saveUserTipsCF = httpsCallable(window.functions, 'saveUserTipsCF', { timeout: 10000 });
 
         const jednaTipMapa = {
             [matchId]: {
@@ -207,14 +215,17 @@ window.saveTip = async (matchId, leagueName, event) => {
             }
         };
 
-        // Vyčistíme klientský registr chyb pro tento konkrétní zápas před novým pokusem
         window.rejectedTipsCache = (window.rejectedTipsCache || []).filter(id => id !== matchId);
 
-        const res = await saveUserTipsCF({
-            leagueName: leagueName,
-            tipyMapa: jednaTipMapa,
-            sezonaId: window.SEZONA_ID
-        });
+        // ⏱️ TVRDÁ POJISTKA PROTI ZAMRZNUTÍ TLAČÍTKA NA ⏳ (MAX 10s)
+        const res = await Promise.race([
+            saveUserTipsCF({
+                leagueName: leagueName,
+                tipyMapa: jednaTipMapa,
+                sezonaId: window.SEZONA_ID
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Server neodpověděl včas (spojení selhalo). Zkus to znovu.")), 10000))
+        ]);
 
         window.globalniTipoveCooldowny[matchId] = Date.now();
 
@@ -1227,8 +1238,17 @@ window.saveAllUserTips = async (leagueName, event, isSilent = false) => {
     }
 
     try {
-        try { await user.getIdToken(); } catch (e) {}
-        const saveUserTipsCF = httpsCallable(window.functions, 'saveUserTipsCF', { timeout: 20000 });
+        // 🛡️ BLESKOVÁ OBNOVA TOKENU S PEVNÝM TIMEOUTEM (MAX 3.5s PROTI ZÁSEKU)
+        try {
+            await Promise.race([
+                user.getIdToken(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("Token timeout")), 3500))
+            ]);
+        } catch (e) {
+            console.warn("Rychlá obnova tokenu vypršela, pokračuji:", e.message);
+        }
+
+        const saveUserTipsCF = httpsCallable(window.functions, 'saveUserTipsCF', { timeout: 12000 });
 
         const cistaMapaTipuProServer = {};
         Object.keys(updateObj.souteze[ligaKlic].tipy).forEach(mId => {
@@ -1239,14 +1259,17 @@ window.saveAllUserTips = async (leagueName, event, isSilent = false) => {
             };
         });
 
-        // Kompletně vymažeme globální chybový registr chyb před odesláním sady tipů
         window.rejectedTipsCache = [];
 
-        const res = await saveUserTipsCF({
-            leagueName: leagueName,
-            tipyMapa: cistaMapaTipuProServer,
-            sezonaId: window.SEZONA_ID
-        });
+        // ⏱️ TVRDÁ POJISTKA PROTI ZAMRZNUTÍ HROMADNÉHO TLAČÍTKA (MAX 12s)
+        const res = await Promise.race([
+            saveUserTipsCF({
+                leagueName: leagueName,
+                tipyMapa: cistaMapaTipuProServer,
+                sezonaId: window.SEZONA_ID
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Server neodpověděl včas. Zkontroluj připojení a zkus to znovu.")), 12000))
+        ]);
 
         const casUlozeni = Date.now();
         window.globalniTipoveCooldowny["HROMADNY_ZAPIS"] = casUlozeni;

@@ -115,6 +115,7 @@ async function evaluateGroupsGuillotine(leagueName, sezonaId = DEFAULT_SEASON_ID
         aktivovano++;
       } else {
         await rtdb.ref(`skupiny/${sezonaId}/${ligaKlic}/${gId}`).remove();
+        await rtdb.ref(`skupiny_kody/${gId}`).remove().catch(() => {});
         smazano++;
       }
     }
@@ -184,9 +185,8 @@ const createGroupCF = onCall({ cors: true }, async (request) => {
     .replace(/\s+/g, "");
 
   const ligaKlic = String(liga).replace(/ /g, "_");
-  const seasonGroupsSnap = await rtdb.ref(`skupiny/${sezonaId}`).get();
-  const allLeaguesData = seasonGroupsSnap.exists() ? (seasonGroupsSnap.val() || {}) : {};
-  const currentLeagueGroups = allLeaguesData[ligaKlic] || {};
+  const leagueGroupsSnap = await rtdb.ref(`skupiny/${sezonaId}/${ligaKlic}`).get();
+  const currentLeagueGroups = leagueGroupsSnap.exists() ? (leagueGroupsSnap.val() || {}) : {};
 
   // 3. Kontrola: Zakladatel smí mít v dané lize maximálně 1 aktivní/čekající skupinu
   const maAktivni = Object.values(currentLeagueGroups).some(g => g.autorUid === uid && g.status !== "CANCELLED");
@@ -200,7 +200,7 @@ const createGroupCF = onCall({ cors: true }, async (request) => {
     throw new HttpsError("already-exists", `Skupina s názvem "${rawNazev}" již v této lize existuje! Zvol jiný název.`);
   }
 
-  // 5. Vygenerování 6místného kódu unikátního v celé sezóně
+  // 5. Bleskové vygenerování 6místného kódu přes index skupiny_kody
   let kod = "";
   let jeUnikatni = false;
   let pokusu = 0;
@@ -208,14 +208,8 @@ const createGroupCF = onCall({ cors: true }, async (request) => {
   while (!jeUnikatni && pokusu < 10) {
     pokusu++;
     kod = vygeneruj6MistyKod();
-    let kolize = false;
-    for (const lData of Object.values(allLeaguesData)) {
-      if (lData && lData[kod]) {
-        kolize = true;
-        break;
-      }
-    }
-    if (!kolize) {
+    const kodSnap = await rtdb.ref(`skupiny_kody/${kod}`).get();
+    if (!kodSnap.exists()) {
       jeUnikatni = true;
     }
   }
@@ -224,7 +218,7 @@ const createGroupCF = onCall({ cors: true }, async (request) => {
     throw new HttpsError("internal", "Nepodařilo se vygenerovat unikátní kód, zkus to prosím znovu.");
   }
 
-  // 6. Uložení skupiny do RTDB
+  // 6. Uložení skupiny a zápis do rozcestníku kódů
   const groupPayload = {
     id: kod,
     kod: kod,
@@ -233,7 +227,7 @@ const createGroupCF = onCall({ cors: true }, async (request) => {
     liga: liga,
     sezonaId: sezonaId,
     autorUid: uid,
-    status: "PENDING", // PENDING = čeká na gilotinu a 10 hráčů
+    status: "PENDING",
     clenove: [uid],
     ghostUids: [],
     pocetClenu: 1,
@@ -242,6 +236,13 @@ const createGroupCF = onCall({ cors: true }, async (request) => {
   };
 
   await rtdb.ref(`skupiny/${sezonaId}/${ligaKlic}/${kod}`).set(groupPayload);
+  await rtdb.ref(`skupiny_kody/${kod}`).set({
+    kod: kod,
+    groupId: kod,
+    liga: liga,
+    ligaKlic: ligaKlic,
+    sezonaId: sezonaId
+  });
 
   // 👥 Privátní index hráče pro bezpečné a bleskové načtení vlastních part v mobilu (0 reads)
   await rtdb.ref(`user_groups/${uid}/${ligaKlic}/${kod}`).set({
@@ -319,21 +320,42 @@ const joinGroupCF = onCall({ cors: true }, async (request) => {
   }
   await limitRef.set(nowMs);
 
-  // 1. Nalezení skupiny napříč ligami v dané sezóně
-  const seasonSnap = await rtdb.ref(`skupiny/${sezonaId}`).get();
-  if (!seasonSnap.exists()) {
-    throw new HttpsError("not-found", "Skupina s tímto kódem neexistuje! Zkontroluj překlep.");
-  }
-
-  const allLeagues = seasonSnap.val() || {};
+  // 1. Bleskové nalezení skupiny přes plochý index skupiny_kody
   let targetLeagueKey = null;
+  let targetGroupId = rawKod;
   let targetGroup = null;
 
-  for (const [lKlic, groupsInLeague] of Object.entries(allLeagues)) {
-    if (groupsInLeague && groupsInLeague[rawKod]) {
-      targetLeagueKey = lKlic;
-      targetGroup = groupsInLeague[rawKod];
-      break;
+  const indexSnap = await rtdb.ref(`skupiny_kody/${rawKod}`).get();
+  if (indexSnap.exists()) {
+    const idxData = indexSnap.val();
+    targetLeagueKey = idxData.ligaKlic || String(idxData.liga || "").replace(/ /g, "_");
+    targetGroupId = idxData.groupId || rawKod;
+    const gSnap = await rtdb.ref(`skupiny/${sezonaId}/${targetLeagueKey}/${targetGroupId}`).get();
+    if (gSnap.exists()) {
+      targetGroup = gSnap.val();
+    }
+  }
+
+  // 🛡️ Samoopravný fallback pro starší skupiny (pokud ještě nebyly v indexu)
+  if (!targetGroup) {
+    const seasonSnap = await rtdb.ref(`skupiny/${sezonaId}`).get();
+    if (seasonSnap.exists()) {
+      const allLeagues = seasonSnap.val() || {};
+      for (const [lKlic, groupsInLeague] of Object.entries(allLeagues)) {
+        if (groupsInLeague && groupsInLeague[rawKod]) {
+          targetLeagueKey = lKlic;
+          targetGroup = groupsInLeague[rawKod];
+          // Automatické doindexování pro všechny budoucí dotazy
+          await rtdb.ref(`skupiny_kody/${rawKod}`).set({
+            kod: rawKod,
+            groupId: rawKod,
+            liga: targetGroup.liga,
+            ligaKlic: lKlic,
+            sezonaId: sezonaId
+          }).catch(() => {});
+          break;
+        }
+      }
     }
   }
 

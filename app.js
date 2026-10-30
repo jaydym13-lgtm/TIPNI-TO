@@ -2276,10 +2276,18 @@ document.addEventListener("visibilitychange", async () => {
 	// ⚡ 2. MOBIL VYTAŽEN Z KAPSY (BLESKOVÉ PROBUZENÍ POUZE PŘES WEBSOCKET)
 	else {
 		try { await enableNetwork(db); } catch (e) {}
-		try { if (rtdb) goOnline(rtdb); } catch (e) {}
+		try {
+			if (rtdb) {
+				goOffline(rtdb);
+				goOnline(rtdb);
+			}
+		} catch (e) {}
 
-		// 🍏 iOS WebKit WAKEUP PULSE: Okamžitá obnova tokenu
+		// 🍏 Okamžitá obnova presence a tokenu
 		if (window.auth?.currentUser) {
+			if (typeof window.spustRtdbPresence === 'function') {
+				window.spustRtdbPresence(window.auth.currentUser.uid, true);
+			}
 			window.auth.currentUser.getIdToken(true).catch(() => {});
 		}
 

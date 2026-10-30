@@ -2,7 +2,7 @@
 // 🔐 TIPNI TO! - ŽIVÁ AUTENTIKACE A SLEDOVÁNÍ ROLÍ V REÁLNÉM ČASE (auth.js)
 // =========================================================================
 
-import { signInWithEmailAndPassword, signOut, onIdTokenChanged, GoogleAuthProvider, signInWithPopup, linkWithPopup, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import { signInWithEmailAndPassword, signOut, onIdTokenChanged, GoogleAuthProvider, signInWithPopup, linkWithPopup, createUserWithEmailAndPassword, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 import { doc, getDoc, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, collection, arrayUnion } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 import { getDatabase, ref as rtdbRef, onValue as onRtdbValue, onDisconnect, set as setRtdb, serverTimestamp as rtdbServerTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
@@ -11,41 +11,34 @@ import { getDatabase, ref as rtdbRef, onValue as onRtdbValue, onDisconnect, set 
 let rtdbConnectedUnsubscribe = null;
 let rtdbCurrentPresenceUid = null;
 
-window.spustRtdbPresence = (uid) => {
+window.spustRtdbPresence = (uid, force = false) => {
     if (!uid || !window.app) return;
-    if (rtdbCurrentPresenceUid === uid && rtdbConnectedUnsubscribe) return;
+    if (!force && rtdbCurrentPresenceUid === uid && rtdbConnectedUnsubscribe) return;
 
     const user = window.auth?.currentUser;
     if (!user || user.uid !== uid) return;
 
-    // 🛡️ ČISTÉ OVĚŘENÍ BEZ TIMEOUTU: Počkáme na nativní Promise tokenu před zápisem do socketu
-    user.getIdTokenResult().then(() => {
-        if (window.auth?.currentUser?.uid !== uid) return;
+    if (rtdbConnectedUnsubscribe) {
+        try { rtdbConnectedUnsubscribe(); } catch (e) {}
+        rtdbConnectedUnsubscribe = null;
+    }
 
-        if (rtdbConnectedUnsubscribe) {
-            rtdbConnectedUnsubscribe();
-            rtdbConnectedUnsubscribe = null;
+    rtdbCurrentPresenceUid = uid;
+    const rtdb = getDatabase(window.app);
+    const myStatusRef = rtdbRef(rtdb, `status/${uid}`);
+    const connectedRef = rtdbRef(rtdb, '.info/connected');
+
+    rtdbConnectedUnsubscribe = onRtdbValue(connectedRef, (snap) => {
+        if (snap.val() === true) {
+            onDisconnect(myStatusRef).set({
+                online: false,
+                lastSeen: rtdbServerTimestamp()
+            });
+            setRtdb(myStatusRef, {
+                online: true,
+                lastSeen: rtdbServerTimestamp()
+            });
         }
-
-        rtdbCurrentPresenceUid = uid;
-        const rtdb = getDatabase(window.app);
-        const myStatusRef = rtdbRef(rtdb, `status/${uid}`);
-        const connectedRef = rtdbRef(rtdb, '.info/connected');
-
-        rtdbConnectedUnsubscribe = onRtdbValue(connectedRef, (snap) => {
-            if (snap.val() === true) {
-                onDisconnect(myStatusRef).set({
-                    online: false,
-                    lastSeen: rtdbServerTimestamp()
-                });
-                setRtdb(myStatusRef, {
-                    online: true,
-                    lastSeen: rtdbServerTimestamp()
-                });
-            }
-        });
-    }).catch((err) => {
-        console.warn("RTDB presence auth sync error:", err);
     });
 };
 
@@ -68,8 +61,8 @@ window.odpojRtdbPresence = async (uid) => {
     }
 };
 
-// 👀 VSTUP PRO HOSTA S ŽIVOU RTDB TELEMETRIÍ (ZERO AUTH)
-window.enterAsGuest = () => {
+// 👀 VSTUP PRO HOSTA S ŽIVOU RTDB TELEMETRIÍ (ANONYMOUS AUTH)
+window.enterAsGuest = async () => {
     const store = Alpine.store('appState');
     if (!store) return;
 
@@ -81,16 +74,14 @@ window.enterAsGuest = () => {
     localStorage.removeItem('savedLeague');
 
     try {
-        let guestSessionId = sessionStorage.getItem('tipni_guest_session_id');
-        const isNewSession = !guestSessionId;
-        if (!guestSessionId) {
-            guestSessionId = 'guest_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
-            sessionStorage.setItem('tipni_guest_session_id', guestSessionId);
+        if (!window.auth?.currentUser) {
+            await signInAnonymously(window.auth);
         }
+        const guestUid = window.auth?.currentUser?.uid;
 
-        if (window.app) {
+        if (guestUid && window.app) {
             const rtdb = getDatabase(window.app);
-            const myGuestRef = rtdbRef(rtdb, `guest_presence/${guestSessionId}`);
+            const myGuestRef = rtdbRef(rtdb, `guest_presence/${guestUid}`);
 
             onDisconnect(myGuestRef).remove();
             setRtdb(myGuestRef, {
@@ -98,7 +89,9 @@ window.enterAsGuest = () => {
                 ts: rtdbServerTimestamp()
             });
 
+            const isNewSession = !sessionStorage.getItem('tipni_guest_session_logged');
             if (isNewSession) {
+                sessionStorage.setItem('tipni_guest_session_logged', 'true');
                 const totalRef = rtdbRef(rtdb, 'guest_stats/total');
                 const lastSeenRef = rtdbRef(rtdb, 'guest_stats/lastSeen');
                 runTransaction(totalRef, (count) => (count || 0) + 1);
@@ -246,22 +239,22 @@ window.togglePasswordVisibility = (inputId = 'password', toggleId = 'togglePassw
 window.logout = async () => {
     const store = Alpine.store('appState');
     if (store?.isGuest) {
-        const guestSessionId = sessionStorage.getItem('tipni_guest_session_id');
-        if (guestSessionId && window.app) {
+        const guestUid = window.auth?.currentUser?.uid;
+        if (guestUid && window.app) {
             try {
                 const rtdb = getDatabase(window.app);
-                await setRtdb(rtdbRef(rtdb, `guest_presence/${guestSessionId}`), null);
+                await setRtdb(rtdbRef(rtdb, `guest_presence/${guestUid}`), null);
             } catch(e) {}
         }
-        sessionStorage.removeItem('tipni_guest_session_id');
+        sessionStorage.removeItem('tipni_guest_session_logged');
         store.isGuest = false;
         store.nickname = '';
-        // 🧹 Sanitace zařízení pro hosta
         const zachovatKliceHost = new Set(['tipni_app_version', 'tipni_fan_graphics']);
         Object.keys(localStorage).forEach(k => {
             if (!zachovatKliceHost.has(k)) localStorage.removeItem(k);
         });
         sessionStorage.clear();
+        try { await signOut(window.auth); } catch(e) {}
         location.reload();
         return;
     }
@@ -461,6 +454,33 @@ const vykonejBezpecnyAuthRouting = (user) => {
         store._leagues = [];
         store.myOvr = 0;
         
+        if (typeof window.hideSplash === 'function') window.hideSplash();
+        return;
+    }
+
+    // 🛑 JISTIČ ANONYMNÍHO HOSTA:
+    if (user.isAnonymous) {
+        store.isGuest = true;
+        store.nickname = 'Host';
+        store.isAdmin = false;
+        store.isSuperAdmin = false;
+        store.godModeActive = false;
+        store.adminLeagues = [];
+        store._leagues = [];
+        store.myOvr = 0;
+
+        try {
+            if (window.app) {
+                const rtdb = getDatabase(window.app);
+                const myGuestRef = rtdbRef(rtdb, `guest_presence/${user.uid}`);
+                onDisconnect(myGuestRef).remove();
+                setRtdb(myGuestRef, {
+                    online: true,
+                    ts: rtdbServerTimestamp()
+                });
+            }
+        } catch (e) {}
+
         if (typeof window.hideSplash === 'function') window.hideSplash();
         return;
     }

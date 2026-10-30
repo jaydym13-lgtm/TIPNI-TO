@@ -17,12 +17,20 @@
     "guest_presence": {
       ".read": true,
       "$guestId": {
-        ".write": true
+        ".write": "auth != null && auth.uid === $guestId",
+        ".validate": "newData.hasChildren(['online', 'ts']) && newData.child('online').isBoolean() && newData.child('ts').isNumber()"
       }
     },
     "guest_stats": {
       ".read": true,
-      ".write": true
+      "total": {
+        ".write": "auth != null",
+        ".validate": "newData.isNumber()"
+      },
+      "lastSeen": {
+        ".write": "auth != null",
+        ".validate": "newData.isNumber()"
+      }
     },
     "admin_roster": {
       ".read": "auth != null && (auth.token.isAdmin === true || auth.token.isSuperAdmin === true)",

@@ -32,11 +32,16 @@ const saveUserTipsCF = onCall({ cors: true }, async (request) => {
   }
   await limitRef.set(nowMs);
   const email = request.auth.token.email || "";
-  const { leagueName, tipyMapa } = request.data;
-  const sezonaId = request.data.sezonaId || "2026_2027";
+  const { leagueName, tipyMapa } = request.data || {};
+  const sezonaId = request.data?.sezonaId || "2026_2027";
 
-  if (!leagueName || !tipyMapa || Object.keys(tipyMapa).length === 0) {
+  if (!leagueName || !tipyMapa || typeof tipyMapa !== "object" || Object.keys(tipyMapa).length === 0) {
     throw new HttpsError("invalid-argument", "Chybí název soutěže nebo mapa tvých tipů!");
+  }
+
+  // 🛡️ OCHRANA PROTI DENIAL OF WALLET: Zastropování dávky na max 25 zápasů
+  if (Object.keys(tipyMapa).length > 25) {
+    throw new HttpsError("invalid-argument", "Dávka obsahuje příliš mnoho zápasů najednou (max 25).");
   }
 
   try {

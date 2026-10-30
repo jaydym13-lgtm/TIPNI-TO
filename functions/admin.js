@@ -1271,6 +1271,13 @@ const adminManageGroupCF = onCall({
       };
 
       await rtdb.ref(`skupiny/${sezonaId}/${ligaKlic}/${kod}`).set(novaSkupina);
+      await rtdb.ref(`skupiny_kody/${kod}`).set({
+        kod: kod,
+        groupId: kod,
+        liga: leagueName,
+        ligaKlic: ligaKlic,
+        sezonaId: sezonaId
+      }).catch(() => {});
 
       // Zápis privátního indexu pro zakládajícího SuperAdmina
       await rtdb.ref(`user_groups/${request.auth.uid}/${ligaKlic}/${kod}`).set({
@@ -1481,6 +1488,7 @@ const adminManageGroupCF = onCall({
       }
 
       await rtdb.ref(`skupiny/${sezonaId}/${ligaKlic}/${groupId}`).remove();
+      await rtdb.ref(`skupiny_kody/${groupId}`).remove().catch(() => {});
 
       try {
         await r2Client.send(new DeleteObjectCommand({

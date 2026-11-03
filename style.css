@@ -9382,3 +9382,11 @@ body .custom-dropdown-item {
 .btn-join-league:active {
     transform: scale(0.96);
 }
+
+/* ========================================================================= */
+/* 🚫 ČISTÉ SKRYTÍ NETLIFY BADGE IFRAME (BEZ !IMPORTANT)                     */
+/* ========================================================================= */
+iframe[data-nl-ready],
+iframe[style*="2147483645"] {
+    display: none;
+}

@@ -94,8 +94,8 @@ window.enterAsGuest = async () => {
                 sessionStorage.setItem('tipni_guest_session_logged', 'true');
                 const totalRef = rtdbRef(rtdb, 'guest_stats/total');
                 const lastSeenRef = rtdbRef(rtdb, 'guest_stats/lastSeen');
-                runTransaction(totalRef, (count) => (count || 0) + 1);
-                setRtdb(lastSeenRef, rtdbServerTimestamp());
+                runTransaction(totalRef, (count) => (count || 0) + 1).catch(() => {});
+                setRtdb(lastSeenRef, rtdbServerTimestamp()).catch(() => {});
             }
         }
     } catch (err) {
